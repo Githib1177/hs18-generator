@@ -14,11 +14,22 @@
     .muted{color:#6b7280}
     .bar{height:12px;background:#0b1220;border-radius:10px;margin-top:12px}
     code{background:#f3f4f6;padding:.1rem .3rem;border-radius:.3rem}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .row>*{flex:1 1 280px}
+    pre{background:#0b1220;color:#d1e0ff;padding:12px;border-radius:10px;white-space:pre-wrap;max-height:260px;overflow:auto}
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>HS18 – Generator</h1>
+
+    <div class="card">
+      <div class="row">
+        <div><button id="ping" class="btn">🔎 Otestovat /api/ping</button></div>
+        <div><button id="openPing" class="btn">🌐 Otevřít /api/ping</button></div>
+      </div>
+      <pre id="pong"></pre>
+    </div>
 
     <div class="card">
       <p class="muted">
@@ -28,8 +39,8 @@
     </div>
 
     <div class="card">
-      <h3>Rychlý test API</h3>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <h3>Rychlý test odeslání</h3>
+      <div class="row">
         <div>
           <label for="tels">Telefon(y)</label>
           <input id="tels" placeholder="+420777123456, +420..." />
@@ -39,10 +50,10 @@
           <input id="msg" value="Test SMS z HS18 Generatoru" />
         </div>
       </div>
-      <div style="margin-top:12px">
-        <button id="send" class="btn">Odeslat přes API</button>
+      <div class="row" style="margin-top:12px">
+        <div><button id="send" class="btn">📨 Odeslat přes API</button></div>
       </div>
-      <pre id="out" style="background:#0b1220;color:#d1e0ff;padding:12px;border-radius:10px;white-space:pre-wrap;margin-top:12px;max-height:240px;overflow:auto"></pre>
+      <pre id="out"></pre>
       <div class="bar"></div>
     </div>
   </div>
@@ -53,42 +64,50 @@
 
     // Spustit až po načtení DOM
     document.addEventListener('DOMContentLoaded', () => {
-      const telInput = document.getElementById('tels');
-      const msgInput = document.getElementById('msg');
-      const btnSend  = document.getElementById('send');
-      const out      = document.getElementById('out');
+      const telInput  = document.getElementById('tels');
+      const msgInput  = document.getElementById('msg');
+      const btnSend   = document.getElementById('send');
+      const out       = document.getElementById('out');
 
-      if (!telInput || !msgInput || !btnSend || !out) {
-        if (out) out.textContent = 'Chyba: chybí některý z prvků (#tels, #msg, #send, #out).';
-        return;
+      const btnPing   = document.getElementById('ping');
+      const btnOpen   = document.getElementById('openPing');
+      const pong      = document.getElementById('pong');
+
+      // helper pro bezpečné čtení odpovědi
+      async function readResponse(r){
+        const ct = (r.headers.get('content-type') || '').toLowerCase();
+        if (ct.includes('application/json')) return await r.json();
+        return { status: r.status, text: await r.text() };
       }
 
+      // Test /api/ping
+      btnPing.addEventListener('click', async () => {
+        pong.textContent = 'Volám /api/ping…';
+        try{
+          const r = await fetch('/api/ping');
+          const j = await readResponse(r);
+          pong.textContent = JSON.stringify(j, null, 2);
+        }catch(e){
+          pong.textContent = 'Chyba: ' + e.message;
+        }
+      });
+      btnOpen.addEventListener('click', () => window.open('/api/ping', '_blank'));
+
+      // Odeslání SMS
       btnSend.addEventListener('click', async () => {
-        const to = (telInput.value || '')
-          .split(',')
-          .map(s => s.trim())
-          .filter(Boolean);
+        const to = (telInput.value || '').split(',').map(s=>s.trim()).filter(Boolean);
         const text = msgInput.value || '';
 
         out.textContent = 'Odesílám…';
-        try {
+        try{
           const r  = await fetch(SMS_API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ to, text })
           });
-
-          // Bezpečné čtení odpovědi – když server vrátí HTML/text, neshodí to aplikaci
-          const ct = (r.headers.get('content-type') || '').toLowerCase();
-          let payload;
-          if (ct.includes('application/json')) {
-            payload = await r.json();
-          } else {
-            payload = { status: r.status, text: await r.text() };
-          }
-
-          out.textContent = JSON.stringify(payload, null, 2);
-        } catch (e) {
+          const j = await readResponse(r);
+          out.textContent = JSON.stringify(j, null, 2);
+        }catch(e){
           out.textContent = 'Chyba volání API: ' + e.message;
         }
       });
