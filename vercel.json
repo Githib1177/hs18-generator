@@ -5,8 +5,8 @@
     { "src": "public/**", "use": "@vercel/static" }
   ],
   "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/", "dest": "/public/generator.html" },
-    { "src": "/(.*)", "dest": "/public/$1" }
+    { "src": "^/api/(.*)$", "dest": "/api/$1" },
+    { "src": "^/$", "dest": "/public/generator.html" },
+    { "src": "^(.*)$", "dest": "/public/$1" }
   ]
 }
