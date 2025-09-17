@@ -59,10 +59,8 @@
   </div>
 
   <script>
-    // API endpoint – ponech takto i ve svém plném generatoru
     const SMS_API_URL = '/api/send-sms';
 
-    // Spustit až po načtení DOM
     document.addEventListener('DOMContentLoaded', () => {
       const telInput  = document.getElementById('tels');
       const msgInput  = document.getElementById('msg');
@@ -73,14 +71,12 @@
       const btnOpen   = document.getElementById('openPing');
       const pong      = document.getElementById('pong');
 
-      // helper pro bezpečné čtení odpovědi
       async function readResponse(r){
         const ct = (r.headers.get('content-type') || '').toLowerCase();
         if (ct.includes('application/json')) return await r.json();
         return { status: r.status, text: await r.text() };
       }
 
-      // Test /api/ping
       btnPing.addEventListener('click', async () => {
         pong.textContent = 'Volám /api/ping…';
         try{
@@ -93,7 +89,6 @@
       });
       btnOpen.addEventListener('click', () => window.open('/api/ping', '_blank'));
 
-      // Odeslání SMS
       btnSend.addEventListener('click', async () => {
         const to = (telInput.value || '').split(',').map(s=>s.trim()).filter(Boolean);
         const text = msgInput.value || '';
