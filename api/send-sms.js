@@ -1,14 +1,23 @@
 // /api/send-sms.js
 export default async function handler(req, res) {
+  // GET pro snadné ověření, že endpoint EXISTUJE
+  if (req.method === 'GET') {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    return res.status(200).send(JSON.stringify({
+      ok: true,
+      info: "Endpoint /api/send-sms žije. Pro odeslání použij POST s JSON { to: string[], text: string }."
+    }));
+  }
+
   // CORS preflight (neškodí)
   if (req.method === 'OPTIONS') {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     return res.status(200).end();
   }
 
-  // Povolená jen metoda POST
+  // Povolené odeslání pouze POST
   if (req.method !== 'POST') {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     return res.status(405).send(JSON.stringify({ error: 'Method Not Allowed' }));
@@ -48,8 +57,7 @@ export default async function handler(req, res) {
       body.set('action', 'send_sms');
       body.set('number', number);
       body.set('message', String(text).slice(0, 1000));
-      // Pokud chceš posílat Unicode, odkomentuj:
-      // body.set('data_code', 'ucs2');
+      // body.set('data_code', 'ucs2'); // odkomentuj pokud chceš posílat Unicode
 
       const r = await fetch(API_URL, {
         method: 'POST',
