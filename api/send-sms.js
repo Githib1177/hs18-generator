@@ -1,6 +1,6 @@
 // /api/send-sms.js
 export default async function handler(req, res) {
-  // GET pro snadné ověření, že endpoint EXISTUJE
+  // GET – jednoduché ověření existence endpointu
   if (req.method === 'GET') {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     return res.status(200).send(JSON.stringify({
@@ -9,7 +9,7 @@ export default async function handler(req, res) {
     }));
   }
 
-  // CORS preflight (neškodí)
+  // CORS preflight
   if (req.method === 'OPTIONS') {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
@@ -17,7 +17,7 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  // Povolené odeslání pouze POST
+  // Pouze POST pro odeslání SMS
   if (req.method !== 'POST') {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     return res.status(405).send(JSON.stringify({ error: 'Method Not Allowed' }));
@@ -39,7 +39,7 @@ export default async function handler(req, res) {
 
     const API_URL = 'https://api.smsbrana.cz/smsconnect/http.php';
 
-    // Jednoduchá normalizace čísel
+    // Normalizace čísel
     const norm = (n) => {
       let x = String(n).replace(/[()\-\s]/g, '');
       if (x.startsWith('00')) x = '+' + x.slice(2);
@@ -57,7 +57,7 @@ export default async function handler(req, res) {
       body.set('action', 'send_sms');
       body.set('number', number);
       body.set('message', String(text).slice(0, 1000));
-      // body.set('data_code', 'ucs2'); // odkomentuj pokud chceš posílat Unicode
+      // body.set('data_code', 'ucs2'); // pro Unicode aktivuj
 
       const r = await fetch(API_URL, {
         method: 'POST',
