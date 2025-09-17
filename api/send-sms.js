@@ -38,7 +38,6 @@ export default async function handler(req, res) {
       body.set('password', PASSWORD);
       body.set('to', norm(number));
       body.set('message', String(text).slice(0, 1000));
-      body.set('sender', 'InfoSMS');   // <<< pevně nastavený odesílatel
 
       const r = await fetch(API_URL, {
         method: 'POST',
