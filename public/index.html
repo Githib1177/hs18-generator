@@ -1,99 +1,527 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="cs">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>HS18 – Generator</title>
+  <title>Hillside 18 – Generátor odkazů</title>
+  <meta name="theme-color" content="#0f3d2e">
   <style>
-    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;margin:0;background:#f7f7f7;color:#111}
-    .wrap{max-width:980px;margin:28px auto;padding:0 16px}
-    .card{background:#fff;border-radius:14px;box-shadow:0 6px 20px rgba(0,0,0,.08);padding:18px;margin:14px 0}
-    .btn{display:inline-flex;gap:.5rem;align-items:center;padding:12px 16px;border-radius:12px;border:0;background:#1a7f5a;color:#fff;font-weight:800;cursor:pointer}
-    textarea,input{width:100%;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px}
-    label{font-weight:700;margin:.2rem 0 .3rem}
-    .row{display:flex;gap:12px;flex-wrap:wrap}.row>*{flex:1 1 280px}
-    pre{background:#0b1220;color:#d1e0ff;padding:12px;border-radius:10px;white-space:pre-wrap;max-height:260px;overflow:auto}
+    :root{
+      --dark:#0f3d2e;      /* barvy z webu hillside18.cz */
+      --accent:#1a7f5a;
+      --ink:#111827;
+      --muted:#64748b;
+      --panel:#ffffff;
+      --bg:#f6f7f8;
+    }
+    html,body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;line-height:1.55;}
+    .wrap{max-width:980px;margin:20px auto;padding:0 14px;}
+    .h1{font-size:1.9rem;font-weight:800;margin:8px 0 14px;color:var(--dark);text-align:center;}
+    .card{background:var(--panel);border-radius:14px;box-shadow:0 6px 22px rgba(0,0,0,.08);padding:18px;margin:14px 0;}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+    .row-4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+    .field{display:flex;flex-direction:column;gap:6px}
+    label{font-weight:700;font-size:.96rem;color:var(--dark)}
+    input,select,textarea{
+      border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;font-size:1rem;background:#fff;outline:none
+    }
+    textarea{min-height:110px;resize:vertical}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;padding:12px 16px;border-radius:12px;border:0;font-weight:800;text-decoration:none;cursor:pointer}
+    .btn-primary{background:var(--accent);color:#fff}
+    .btn-dark{background:var(--dark);color:#fff}
+    .btn-ghost{background:#fff;border:2px solid var(--dark);color:var(--dark)}
+    .muted{color:var(--muted);font-size:.92rem}
+    .pill{display:inline-block;background:#ecfdf5;border:1px solid #bbf7d0;color:#065f46;padding:.1rem .5rem;border-radius:8px;font-weight:700}
+    .urls a{display:inline-block;margin:6px 8px 0 0;text-decoration:none}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .right{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+    @media (max-width:720px){
+      .row,.row-3,.row-4,.grid2{grid-template-columns:1fr}
+      .right{justify-content:flex-start}
+    }
+    .boxcode{font-family:ui-monospace,Menlo,Consolas,monospace;background:#f0faf5;border:2px solid var(--accent);color:var(--dark);padding:10px 12px;border-radius:10px}
+    .tbl{width:100%;border-collapse:separate;border-spacing:0;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden}
+    .tbl th,.tbl td{padding:10px 12px;border-bottom:1px solid #eef2f7;text-align:left;font-size:.95rem}
+    .tbl th{background:#f8fafc;color:#374151}
+    .badge{display:inline-block;border-radius:999px;padding:.1rem .5rem;font-weight:700;font-size:.82rem}
+    .ok{background:#ecfdf5;color:#065f46;border:1px solid #bbf7d0}
+    .err{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+    .spin{display:inline-block;width:16px;height:16px;border-radius:999px;border:2px solid #fff;border-right-color:transparent;animation:sp .8s linear infinite}
+    @keyframes sp{to{transform:rotate(360deg)}}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>HS18 – Generator</h1>
+    <div class="h1">Hillside 18 – Generátor odkazů (CZ/EN/DE)</div>
 
+    <!-- VSTUPY -->
     <div class="card">
       <div class="row">
-        <div><button id="ping" class="btn">🔎 Otestovat /api/ping</button></div>
-        <div><button id="openPing" class="btn">🌐 Otevřít /api/ping</button></div>
+        <div class="field">
+          <label>Jméno hosta</label>
+          <input id="guestName" placeholder="např. Jan Novák">
+          <div class="muted">Použije se pro oslovení (Pan/Paní • Mr/Ms).</div>
+        </div>
+        <div class="field">
+          <label>Host je žena</label>
+          <select id="guestIsFemale">
+            <option value="auto" selected>Automaticky (podle jména – pokus)</option>
+            <option value="female">Ano (Paní / Ms)</option>
+            <option value="male">Ne (Pan / Mr)</option>
+          </select>
+        </div>
       </div>
-      <pre id="pong"></pre>
+
+      <div class="row-3" style="margin-top:10px">
+        <div class="field">
+          <label>Kód/URL do Alfréda (alf)</label>
+          <input id="alf" placeholder="SEZHFS nebo https://alfred.previo.app/login/SEZHFS">
+        </div>
+        <div class="field">
+          <label>Číslo rezervace / APT (apt)</label>
+          <input id="apt" placeholder="např. 3248">
+        </div>
+        <div class="field">
+          <label>Kód dveří (door) – volitelné</label>
+          <input id="door" placeholder="např. 2580 (nech prázdné ⇒ na stránce se zobrazí xxxx)">
+        </div>
+      </div>
+
+      <div class="row-4" style="margin-top:10px">
+        <div class="field">
+          <label>Stav rezervace</label>
+          <select id="state">
+            <option value="none" selected>Žádný speciální stav</option>
+            <option value="unpaid">Nezaplaceno (unpaid=1)</option>
+            <option value="done">Check-in hotový (done=1)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Telefon (pro odeslání SMS)</label>
+          <input id="phone" placeholder="+420 777 123 456">
+          <div class="muted">Můžeš vložit více čísel oddělených čárkou.</div>
+        </div>
+        <div class="field">
+          <label>Jazyk (primární náhled)</label>
+          <select id="lang">
+            <option value="cs" selected>Čeština</option>
+            <option value="en">English</option>
+            <option value="de">Deutsch</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Base URL stránky (WP)</label>
+          <input id="baseUrl" value="https://www.hillside18.cz/cs/check-in/">
+          <div class="muted">Pro EN/DE se přidá <code>?lang=en</code>/<code>?lang=de</code>.</div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px">
+        <button id="btnBuild" class="btn btn-primary">Vytvořit odkaz</button>
+        <span class="muted">Vygeneruje CZ/EN/DE URL + texty SMS/E-mail.</span>
+      </div>
+    </div>
+
+    <!-- VÝSLEDKY: URL -->
+    <div class="card" id="urlsCard" style="display:none">
+      <h3 style="margin:0 0 8px">Vygenerované odkazy</h3>
+      <div class="urls" id="urls"></div>
+      <div class="right" style="margin-top:10px">
+        <button id="btnOpen" class="btn btn-dark">Otevřít (primární jazyk)</button>
+        <button id="btnCopyUrl" class="btn btn-ghost">Kopírovat URL (primární)</button>
+      </div>
+    </div>
+
+    <!-- VÝSLEDKY: KÓD DVEŘÍ info -->
+    <div class="card" id="doorInfoCard" style="display:none">
+      <h3 style="margin:0 0 8px">Kód dveří (preview)</h3>
+      <div class="boxcode" id="doorPreview">xxxx</div>
+      <div class="muted" style="margin-top:6px">
+        Pokud kód dveří ponecháš prázdný, **neposílá se v URL** a na cílové stránce se zobrazí <b>xxxx</b> a tvoje hláška (beze změny).
+      </div>
+    </div>
+
+    <!-- TEXTY: SMS / E-MAIL (CZ/EN/DE) -->
+    <div class="card" id="textsCard" style="display:none">
+      <h3 style="margin:0 0 10px">Texty pro hosta (SMS / E-mail)</h3>
+
+      <div class="grid2">
+        <div>
+          <h4 style="margin:.2rem 0">SMS (CZ)</h4>
+          <textarea id="sms_cs"></textarea>
+          <div class="right">
+            <button class="btn btn-ghost" data-copy="sms_cs">Kopírovat SMS (CZ)</button>
+          </div>
+        </div>
+        <div>
+          <h4 style="margin:.2rem 0">E-mail (CZ)</h4>
+          <textarea id="mail_cs"></textarea>
+          <div class="right">
+            <button class="btn btn-ghost" data-copy="mail_cs">Kopírovat e-mail (CZ)</button>
+          </div>
+        </div>
+
+        <div>
+          <h4 style="margin:.2rem 0">SMS (EN)</h4>
+          <textarea id="sms_en"></textarea>
+          <div class="right">
+            <button class="btn btn-ghost" data-copy="sms_en">Copy SMS (EN)</button>
+          </div>
+        </div>
+        <div>
+          <h4 style="margin:.2rem 0">E-mail (EN)</h4>
+          <textarea id="mail_en"></textarea>
+          <div class="right">
+            <button class="btn btn-ghost" data-copy="mail_en">Copy e-mail (EN)</button>
+          </div>
+        </div>
+
+        <div>
+          <h4 style="margin:.2rem 0">SMS (DE)</h4>
+          <textarea id="sms_de"></textarea>
+          <div class="right">
+            <button class="btn btn-ghost" data-copy="sms_de">SMS kopieren (DE)</button>
+          </div>
+        </div>
+        <div>
+          <h4 style="margin:.2rem 0">E-mail (DE)</h4>
+          <textarea id="mail_de"></textarea>
+          <div class="right">
+            <button class="btn btn-ghost" data-copy="mail_de">E-Mail kopieren (DE)</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:12px">
+        <div class="field">
+          <label>WhatsApp (primární jazyk)</label>
+          <a id="wa" class="btn btn-ghost" href="#" target="_blank" rel="noopener">Otevřít WhatsApp</a>
+        </div>
+        <div class="field">
+          <label>SMS (primární jazyk)</label>
+          <a id="sms" class="btn btn-ghost" href="#">Otevřít SMS aplikaci</a>
+        </div>
+      </div>
+
+      <div class="right" style="margin-top:10px">
+        <button id="btnSendSms" class="btn btn-primary">Odeslat SMS přes bránu</button>
+      </div>
+      <div id="smsStatus" class="muted" style="margin-top:8px"></div>
+      <div id="smsTableWrap" style="margin-top:10px;display:none">
+        <table class="tbl" id="smsTable">
+          <thead><tr><th>Číslo</th><th>Stav</th><th>Err</th><th>Pokus</th><th>Endpoint</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
 
     <div class="card">
-      <h3>Rychlý test odeslání</h3>
-      <div class="row">
-        <div>
-          <label for="tels">Telefon(y)</label>
-          <input id="tels" placeholder="+420777123456, +420..." />
-        </div>
-        <div>
-          <label for="msg">Zpráva</label>
-          <input id="msg" value="Test SMS z HS18 Generatoru" />
-        </div>
+      <div class="muted">
+        Tip: do URL Link Builderu můžeš předvyplnit <code>alf</code>, <code>apt</code>, <code>lang</code>, <code>unpaid=1</code>, a volitelně <code>door</code>.<br>
+        Příklad (EN): <span class="pill">https://www.hillside18.cz/cs/check-in/?lang=en&amp;alf=…&amp;apt=3248&amp;unpaid=1</span>
       </div>
-      <div class="row" style="margin-top:12px">
-        <div><button id="send" class="btn">📨 Odeslat přes API</button></div>
-      </div>
-      <pre id="out"></pre>
     </div>
   </div>
 
   <script>
-    const SMS_API_URL = '/api/send-sms';
+    // ==== KONSTANTY ====
+    const SMS_API_URL = '/api/send-sms'; // stejný endpoint jako Link Builder
+    const SITE_CZ = 'https://www.hillside18.cz/cs/check-in/';
 
-    document.addEventListener('DOMContentLoaded', () => {
-      const telInput  = document.getElementById('tels');
-      const msgInput  = document.getElementById('msg');
-      const btnSend   = document.getElementById('send');
-      const out       = document.getElementById('out');
+    // ==== UTIL ====
+    function trim(s){ return (s||'').trim(); }
+    function urlEnc(s){ return encodeURIComponent(s); }
+    function isUrl(v){ return /^https?:\/\//i.test(v||''); }
 
-      const btnPing   = document.getElementById('ping');
-      const btnOpen   = document.getElementById('openPing');
-      const pong      = document.getElementById('pong');
+    function normalizePhones(raw){
+      // víc čísel oddělených čárkou
+      return (raw||'')
+        .split(',')
+        .map(s=>s.trim())
+        .filter(Boolean)
+        .map(s=>{
+          let x=s.replace(/[()\-\s]/g,'');
+          if(x.startsWith('00')) x = '+'+x.slice(2);
+          if(x.startsWith('0') && !x.startsWith('+')) x = '+420'+x.slice(1); // CZ default
+          return x;
+        })
+        .filter(v=>/^\+\d{7,15}$/.test(v));
+    }
 
-      async function readResponse(r){
-        const ct = (r.headers.get('content-type') || '').toLowerCase();
-        if (ct.includes('application/json')) return await r.json();
-        return { status: r.status, text: await r.text() };
+    function getLastname(full){
+      full = trim(full);
+      if(!full) return '';
+      // odeber běžné tituly
+      full = full.replace(/\b(ing\.|mgr\.|bc\.|phd\.|dis\.|mdd?\.|rsdr\.|juDr\.|mudr\.)\b/gi,'').trim();
+      const parts = full.split(/\s+/);
+      return parts.length ? parts[parts.length-1] : full;
+    }
+
+    function guessGender(name){
+      // jednoduchý odhad podle koncovky (CZ)
+      name = (name||'').toLowerCase();
+      if(/[aá]$/.test(name)) return 'female';
+      return 'male';
+    }
+
+    // ==== STAV/UI ====
+    const el = id => document.getElementById(id);
+
+    const stateTexts = {
+      cs:{ none:'', unpaid:'Nezaplaceno', done:'Check-in hotový' },
+      en:{ none:'', unpaid:'Unpaid',      done:'Check-in completed' },
+      de:{ none:'', unpaid:'Unbezahlt',   done:'Check-in abgeschlossen' },
+    };
+
+    function buildUrl(base, lang, alf, apt, door, state){
+      let u = new URL(base || SITE_CZ);
+      if(lang==='en') u.searchParams.set('lang','en');
+      if(lang==='de') u.searchParams.set('lang','de');
+
+      if(isUrl(alf)){
+        u.searchParams.set('alf', alf);
+      }else if(alf){
+        u.searchParams.set('alf', 'https://alfred.previo.app/login/'+encodeURIComponent(alf));
+      }
+      if(apt) u.searchParams.set('apt', apt);
+      // door jen pokud je zadán (jinak se na cíli zobrazí xxxx + tvoje hláška)
+      if(door) u.searchParams.set('door', door);
+
+      if(state==='unpaid') u.searchParams.set('unpaid','1');
+      if(state==='done')   u.searchParams.set('done','1');
+
+      return u.toString();
+    }
+
+    function salutation(lang, fullName, isFemaleSel){
+      const last = getLastname(fullName);
+      let gender = isFemaleSel;
+      if(gender==='auto') gender = guessGender(fullName);
+      if(lang==='cs'){
+        return (gender==='female' ? 'Paní' : 'Pane') + (last ? ' '+last : '');
+      }
+      if(lang==='en'){
+        return (gender==='female' ? 'Ms' : 'Mr') + (last ? ' '+last : '');
+      }
+      // de
+      return (gender==='female' ? 'Frau' : 'Herr') + (last ? ' '+last : '');
+    }
+
+    function makeTexts(urls, door, st, fullName, isFemaleSel){
+      const sCS = salutation('cs', fullName, isFemaleSel);
+      const sEN = salutation('en', fullName, isFemaleSel);
+      const sDE = salutation('de', fullName, isFemaleSel);
+
+      const doorPartCS = door ? `Váš kód k hlavním dveřím: ${door}.` : `Kód k hlavním dveřím bude doplněn po dokončení on-line check-inu (na stránce uvidíte „xxxx“ do té doby).`;
+      const doorPartEN = door ? `Your main door code: ${door}.` : `The main door code will be provided after the online check-in is completed (you will see “xxxx” until then).`;
+      const doorPartDE = door ? `Ihr Haustür-Code: ${door}.` : `Der Haustür-Code wird nach dem Online-Check-in bereitgestellt (bis dahin sehen Sie „xxxx“).`;
+
+      const stCS = stateTexts.cs[st]; const stEN = stateTexts.en[st]; const stDE = stateTexts.de[st];
+      const badgeCS = stCS ? ` (${stCS})` : '';
+      const badgeEN = stEN ? ` (${stEN})` : '';
+      const badgeDE = stDE ? ` (${stDE})` : '';
+
+      const phoneMain = '+420 840 113 114';
+      const phoneOnsite = '+420 731 990 087';
+
+      const sms_cs =
+`${sCS}, prosíme o on-line check-in pro Hillside 18${badgeCS}:
+${urls.cs}
+${doorPartCS}
+Recepce: ${phoneMain} • Podpora: ${phoneOnsite}`;
+
+      const mail_cs =
+`Dobrý den ${sCS},
+posíláme vám odkaz na informace k příjezdu do Hillside 18${badgeCS}:
+${urls.cs}
+
+${doorPartCS}
+
+Recepce: ${phoneMain}
+Podpora na místě: ${phoneOnsite}
+Děkujeme a přejeme příjemný pobyt!`;
+
+      const sms_en =
+`${sEN}, please complete the online check-in for Hillside 18${badgeEN}:
+${urls.en}
+${doorPartEN}
+Reception: ${phoneMain} • On-site: ${phoneOnsite}`;
+
+      const mail_en =
+`Dear ${sEN},
+here is your arrival info link for Hillside 18${badgeEN}:
+${urls.en}
+
+${doorPartEN}
+
+Reception: ${phoneMain}
+On-site support: ${phoneOnsite}
+Thank you and enjoy your stay!`;
+
+      const sms_de =
+`${sDE}, bitte füllen Sie das Online-Check-in für Hillside 18 aus${badgeDE}:
+${urls.de}
+${doorPartDE}
+Rezeption: ${phoneMain} • Vor Ort: ${phoneOnsite}`;
+
+      const mail_de =
+`Guten Tag ${sDE},
+hier ist Ihr Anreise-Link für Hillside 18${badgeDE}:
+${urls.de}
+
+${doorPartDE}
+
+Rezeption: ${phoneMain}
+Vor-Ort-Support: ${phoneOnsite}
+Vielen Dank und einen angenehmen Aufenthalt!`;
+
+      return { sms_cs, mail_cs, sms_en, mail_en, sms_de, mail_de };
+    }
+
+    // ==== AKCE ====
+    el('btnBuild').addEventListener('click', ()=>{
+      const fullName = trim(el('guestName').value);
+      const isFemaleSel = el('guestIsFemale').value;
+      const alf = trim(el('alf').value);
+      const apt = trim(el('apt').value);
+      const door = trim(el('door').value);
+      const state = el('state').value;
+      const base = trim(el('baseUrl').value) || SITE_CZ;
+      const lang = el('lang').value;
+
+      if(!alf || !apt){
+        alert('Vyplň alespoň: Kód/URL do Alfréda (alf) a APT (apt).');
+        return;
       }
 
-      btnPing.addEventListener('click', async () => {
-        pong.textContent = 'Volám /api/ping…';
-        try{
-          const r = await fetch('/api/ping');
-          const j = await readResponse(r);
-          pong.textContent = JSON.stringify(j, null, 2);
-        }catch(e){
-          pong.textContent = 'Chyba: ' + e.message;
-        }
-      });
-      btnOpen.addEventListener('click', () => window.open('/api/ping', '_blank'));
+      // URL pro všechny 3 jazyky
+      const urlCS = buildUrl(base, 'cs', alf, apt, door, state);
+      const urlEN = buildUrl(base, 'en', alf, apt, door, state);
+      const urlDE = buildUrl(base, 'de', alf, apt, door, state);
 
-      btnSend.addEventListener('click', async () => {
-        const to = (telInput.value || '').split(',').map(s=>s.trim()).filter(Boolean);
-        const text = msgInput.value || '';
+      const urls = { cs:urlCS, en:urlEN, de:urlDE };
 
-        out.textContent = 'Odesílám…';
-        try{
-          const r  = await fetch(SMS_API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ to, text })
-          });
-          const j = await readResponse(r);
-          out.textContent = JSON.stringify(j, null, 2);
-        }catch(e){
-          out.textContent = 'Chyba volání API: ' + e.message;
+      // výpis URL
+      const U = el('urls');
+      U.innerHTML = `
+        <div><b>CZ:</b> <a target="_blank" rel="noopener" href="${urlCS}">${urlCS}</a></div>
+        <div><b>EN:</b> <a target="_blank" rel="noopener" href="${urlEN}">${urlEN}</a></div>
+        <div><b>DE:</b> <a target="_blank" rel="noopener" href="${urlDE}">${urlDE}</a></div>
+      `;
+      el('urlsCard').style.display = '';
+
+      // náhled kódu dveří (respektuje tvoji logiku na cíli)
+      el('doorPreview').textContent = door || 'xxxx';
+      el('doorInfoCard').style.display = '';
+
+      // texty
+      const T = makeTexts(urls, door, state, fullName, isFemaleSel);
+      el('sms_cs').value = T.sms_cs;
+      el('mail_cs').value = T.mail_cs;
+      el('sms_en').value = T.sms_en;
+      el('mail_en').value = T.mail_en;
+      el('sms_de').value = T.sms_de;
+      el('mail_de').value = T.mail_de;
+      el('textsCard').style.display = '';
+
+      // primární jazyk – otevření/kopírování/whatsapp/sms
+      const PRIMARY_URL = lang==='cs'?urlCS : lang==='en'?urlEN : urlDE;
+
+      el('btnOpen').onclick = ()=> window.open(PRIMARY_URL, '_blank','noopener');
+      el('btnCopyUrl').onclick = async ()=>{
+        try{ await navigator.clipboard.writeText(PRIMARY_URL); el('btnCopyUrl').textContent='Zkopírováno'; setTimeout(()=>el('btnCopyUrl').textContent='Kopírovat URL (primární)',1200); }catch(e){}
+      };
+
+      // WhatsApp: primárně CZ/EN/DE dle volby
+      const waText = lang==='cs'? T.sms_cs : lang==='en'? T.sms_en : T.sms_de;
+      el('wa').href = 'https://wa.me/?text=' + encodeURIComponent(waText);
+
+      // SMS: univerzální sms: schema
+      el('sms').href = 'sms:?&body=' + encodeURIComponent(waText);
+    });
+
+    // Kopírková tlačítka
+    document.addEventListener('click', async (e)=>{
+      const target = e.target.closest('[data-copy]');
+      if(!target) return;
+      const id = target.getAttribute('data-copy');
+      const ta = el(id);
+      if(!ta) return;
+      try{
+        await navigator.clipboard.writeText(ta.value||'');
+        const old = target.textContent;
+        target.textContent = 'Zkopírováno';
+        setTimeout(()=> target.textContent = old, 1200);
+      }catch(err){}
+    });
+
+    // Odeslání přes SMS bránu (stejný endpoint jako Link Builder)
+    el('btnSendSms').addEventListener('click', async ()=>{
+      const btn = el('btnSendSms');
+      const phones = normalizePhones(el('phone').value);
+      if(!phones.length){ alert('Zadej alespoň jedno platné telefonní číslo.'); return; }
+
+      // SMS podle primárního jazyka
+      const lang = el('lang').value;
+      const text = lang==='cs' ? el('sms_cs').value
+                 : lang==='en' ? el('sms_en').value
+                 : el('sms_de').value;
+
+      const status = el('smsStatus');
+      const tableWrap = el('smsTableWrap');
+      const tbody = el('smsTable').querySelector('tbody');
+      tbody.innerHTML = '';
+      tableWrap.style.display = 'none';
+
+      btn.disabled = true;
+      const oldHtml = btn.innerHTML;
+      btn.innerHTML = '<span class="spin"></span> Odesílám…';
+      status.textContent = 'Odesílám…';
+
+      try{
+        const res = await fetch(SMS_API_URL, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ to: phones, text })
+        });
+
+        const data = await res.json().catch(()=> ({}));
+
+        if (!res.ok) {
+          status.textContent = '❌ Chyba při odesílání SMS: ' + (data.error || res.status);
+        } else {
+          const results = Array.isArray(data.results) ? data.results : [];
+          const anyOk = results.some(r => (r.err === 0) || r.ok === true);
+
+          // naplň tabulku výsledků (pokud je máme)
+          if (results.length) {
+            for (const r of results) {
+              const tr = document.createElement('tr');
+              const okBadge = (r.err === 0) ? '<span class="badge ok">OK</span>' : '<span class="badge err">ERR</span>';
+              const errCode = (typeof r.err === 'number') ? r.err : (r.ok ? 0 : '—');
+              const attempt = r.attempt || '—';
+              const endpoint = r.endpoint || '—';
+              tr.innerHTML = `
+                <td>${r.to || r.number || '—'}</td>
+                <td>${okBadge}</td>
+                <td>${errCode}</td>
+                <td>${attempt}</td>
+                <td style="word-break:break-all">${endpoint}</td>
+              `;
+              tbody.appendChild(tr);
+            }
+            tableWrap.style.display = '';
+          }
+
+          status.textContent = anyOk ? '✅ SMS úspěšně odeslána' : '❌ SMS se nepodařilo odeslat (viz tabulka níže)';
         }
-      });
+      }catch(err){
+        status.textContent = '❌ Chyba spojení k SMS bráně';
+      }finally{
+        btn.disabled = false;
+        btn.innerHTML = oldHtml;
+      }
     });
   </script>
 </body>
