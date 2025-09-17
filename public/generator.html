@@ -13,6 +13,7 @@
     label{font-weight:700;margin:.2rem 0 .3rem}
     .muted{color:#6b7280}
     .bar{height:12px;background:#0b1220;border-radius:10px;margin-top:12px}
+    code{background:#f3f4f6;padding:.1rem .3rem;border-radius:.3rem}
   </style>
 </head>
 <body>
@@ -21,8 +22,8 @@
 
     <div class="card">
       <p class="muted">
-        Tady pak vlož <b>svůj plný generator</b>. Důležité: ať obsahuje řádek
-        <code>const SMS_API_URL = '/api/send-sms'</code>.
+        Až otestuješ odesílání, vlož sem svůj plný generator.
+        Nech v něm řádek <code>const SMS_API_URL = '/api/send-sms'</code>.
       </p>
     </div>
 
@@ -47,10 +48,10 @@
   </div>
 
   <script>
-    // API endpoint – musí takto zůstat i ve tvém plném generatoru
+    // API endpoint – ponech takto i ve svém plném generatoru
     const SMS_API_URL = '/api/send-sms';
 
-    // Spustit až po načtení DOM, aby byly prvky k dispozici
+    // Spustit až po načtení DOM
     document.addEventListener('DOMContentLoaded', () => {
       const telInput = document.getElementById('tels');
       const msgInput = document.getElementById('msg');
@@ -58,7 +59,6 @@
       const out      = document.getElementById('out');
 
       if (!telInput || !msgInput || !btnSend || !out) {
-        console.error('Chybí některý z prvků: #tels, #msg, #send, #out');
         if (out) out.textContent = 'Chyba: chybí některý z prvků (#tels, #msg, #send, #out).';
         return;
       }
@@ -72,13 +72,22 @@
 
         out.textContent = 'Odesílám…';
         try {
-          const r = await fetch(SMS_API_URL, {
+          const r  = await fetch(SMS_API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ to, text })
           });
-          const j = await r.json();
-          out.textContent = JSON.stringify(j, null, 2);
+
+          // Bezpečné čtení odpovědi – když server vrátí HTML/text, neshodí to aplikaci
+          const ct = (r.headers.get('content-type') || '').toLowerCase();
+          let payload;
+          if (ct.includes('application/json')) {
+            payload = await r.json();
+          } else {
+            payload = { status: r.status, text: await r.text() };
+          }
+
+          out.textContent = JSON.stringify(payload, null, 2);
         } catch (e) {
           out.textContent = 'Chyba volání API: ' + e.message;
         }
