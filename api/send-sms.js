@@ -3,18 +3,19 @@ export default async function handler(req, res) {
   // CORS / preflight
   if (req.method === 'OPTIONS') {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     return res.status(200).end();
   }
 
-  // GET pro rychlou kontrolu env a routingu
+  // GET – rychlý stav
   if (req.method === 'GET') {
     return res.status(200).json({
       ok: true,
       info: "Použij POST { to: string[], text: string }",
       has_SMS_LOGIN: !!process.env.SMS_LOGIN,
-      has_SMS_PASSWORD: !!process.env.SMS_PASSWORD
+      has_SMS_PASSWORD: !!process.env.SMS_PASSWORD,
+      sender_used: process.env.SMS_SENDER || null
     });
   }
 
@@ -25,26 +26,23 @@ export default async function handler(req, res) {
   try {
     const { to, text } = req.body || {};
     if (!Array.isArray(to) || !to.length || !text) {
-      return res.status(400).json({ error: 'Missing "to" (array) or "text"' });
+      return res.status(400).json({ error: 'Missing \"to\" (array) or \"text\"" });
     }
 
     const LOGIN = process.env.SMS_LOGIN;
     const PASSWORD = process.env.SMS_PASSWORD;
+    const SENDER = process.env.SMS_SENDER || ""; // ← nastavíme ve Vercelu (např. "Info SMS")
     if (!LOGIN || !PASSWORD) {
       return res.status(500).json({ error: 'Missing env SMS_LOGIN / SMS_PASSWORD' });
     }
 
-    // Oficiální endpoint SMSbrána.cz (HTTP API „SMS Connect“)
     const API_URL = 'https://api.smsbrana.cz/smsconnect/http.php';
 
-    // Normalizace tel. čísel do +420… pokud chybí prefix
+    // normalizace čísel
     const normalize = (n) => {
-      let x = String(n).replace(/[()\-\s]/g, '');
+      let x = String(n).replace(/[()\-\\s]/g, '');
       if (x.startsWith('00')) x = '+' + x.slice(2);
-      if (!x.startsWith('+')) {
-        // český default – uprav si podle potřeby
-        x = '+420' + (x.startsWith('0') ? x.slice(1) : x);
-      }
+      if (!x.startsWith('+')) x = '+420' + (x.startsWith('0') ? x.slice(1) : x);
       return x;
     };
 
@@ -52,15 +50,13 @@ export default async function handler(req, res) {
     for (const raw of to) {
       const number = normalize(raw);
 
-      // !!! DŮLEŽITÉ: správné názvy polí pro SMSbrána.cz
       const form = new URLSearchParams();
       form.set('login', LOGIN);
       form.set('password', PASSWORD);
-      form.set('action', 'send_sms');     // MUSÍ být
-      form.set('number', number);         // MUSÍ být (ne "to")
+      form.set('action', 'send_sms');     // povinné
+      form.set('number', number);         // povinné
       form.set('message', String(text).slice(0, 1000));
-      // form.set('sender', 'InfoSMS');    // NEPOUŽÍVAT, ať jde přes systémové číslo
-      // form.set('data_code', 'ucs2');    // teprve když bys nutně chtěl Unicode
+      if (SENDER) form.set('sender', SENDER); // ← použijeme jen když je zadán
 
       const r = await fetch(API_URL, {
         method: 'POST',
@@ -69,11 +65,8 @@ export default async function handler(req, res) {
       });
 
       const respText = await r.text();
-
-      // pokus o vytažení <err>kodu – jen pro přehled v odpovědi
-      let errCode = null;
       const m = respText.match(/<err>(\d+)<\/err>/i);
-      if (m) errCode = Number(m[1]);
+      const errCode = m ? Number(m[1]) : null;
 
       results.push({
         to: number,
@@ -81,10 +74,10 @@ export default async function handler(req, res) {
         status: r.status,
         err: errCode,
         response: respText,
-        // DEBUG co se posílalo (bez hesla):
         sent: {
           action: 'send_sms',
           number,
+          sender: SENDER || '(none)',
           message_len: String(text).length
         }
       });
