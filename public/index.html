@@ -275,14 +275,20 @@
     };
 
 function buildUrl(base, lang, alf, apt, door, state){
+  // Vycházej z předané base (může mít query) nebo defaultu
   const u = new URL(base || SITE_CZ);
 
-  // Jazyk
-  if (lang === 'en') u.searchParams.set('lang', 'en');
-  else if (lang === 'de') u.searchParams.set('lang', 'de');
-  else u.searchParams.delete('lang'); // cs → bez parametru
+  // --- Jazyk ---
+  if (lang === 'en') {
+    u.searchParams.set('lang', 'en');
+  } else if (lang === 'de') {
+    u.searchParams.set('lang', 'de');
+  } else {
+    // cs → bez parametru lang
+    u.searchParams.delete('lang');
+  }
 
-  // Alfréd (povol plnou URL i samotný kód)
+  // --- Alfréd (povol plnou URL i kód) ---
   if (isUrl(alf)) {
     u.searchParams.set('alf', alf);
   } else if (alf) {
@@ -291,17 +297,17 @@ function buildUrl(base, lang, alf, apt, door, state){
     u.searchParams.delete('alf');
   }
 
-  // APT – vždy nejdřív vymaž a pak nastav (spolehlivé i po případných redirectech)
+  // --- APT: vždy nejdřív odstraň, pak nastav (aby se nikdy „neztratil“) ---
   u.searchParams.delete('apt');
   if (apt && String(apt).trim().length) {
     u.searchParams.set('apt', String(apt).trim());
   }
 
-  // Door jen pokud vyplněn
+  // --- Door: jen pokud je vyplněn ---
   u.searchParams.delete('door');
   if (door) u.searchParams.set('door', door);
 
-  // Stav
+  // --- Stav rezervace ---
   u.searchParams.delete('unpaid');
   u.searchParams.delete('done');
   if (state === 'unpaid') u.searchParams.set('unpaid', '1');
@@ -309,8 +315,6 @@ function buildUrl(base, lang, alf, apt, door, state){
 
   return u.toString();
 }
-
-
 
     function salutation(lang, fullName, isFemaleSel){
   const last = getLastname(fullName);
