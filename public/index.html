@@ -277,34 +277,34 @@
 function buildUrl(base, lang, alf, apt, door, state){
   const u = new URL(base || 'https://www.hillside18.cz/cs/check-in/');
 
-  // začneme čistě kvůli pořadí
+  // začneme čistě kvůli pevnému pořadí parametrů
   u.search = '';
 
-  // --- APT: vždy první + zrcadla názvů ---
+  // 1) APT – vždy první + aliasy pro EN/DE šablony
   const aptStr = (apt && String(apt).trim().length) ? String(apt).trim() : '';
   if (aptStr){
-    u.searchParams.set('apt', aptStr);          // primární
-    u.searchParams.set('APARTMENT', aptStr);    // zrcadlo (některé šablony)
-    u.searchParams.set('APT', aptStr);          // zrcadlo (whitelist variant)
+    u.searchParams.set('apt', aptStr);             // primární (CZ)
+    u.searchParams.set('apartment', aptStr);       // alias (EN/DE)
+    u.searchParams.set('apartment_no', aptStr);    // alias (EN/DE)
   }
 
-  // Door jen když je vyplněn
+  // 2) Door jen když je vyplněn
   if (door) u.searchParams.set('door', door);
 
-  // Alfréd (plná URL i kód)
+  // 3) Alfréd (plná URL i kód)
   if (/^https?:\/\//i.test(alf)) u.searchParams.set('alf', alf);
   else if (alf) u.searchParams.set('alf', 'https://alfred.previo.app/login/' + encodeURIComponent(alf));
 
-  // Jazyk
+  // 4) Jazyk
   if (lang === 'en') u.searchParams.set('lang', 'en');
   else if (lang === 'de') u.searchParams.set('lang', 'de');
   // cs → bez parametru
 
-  // Stav (unpaid/done)
+  // 5) Stav (unpaid/done)
   if (state === 'unpaid') u.searchParams.set('unpaid', '1');
   if (state === 'done')   u.searchParams.set('done', '1');
 
-  // Záložně i do hashe (pro šablony, co čtou jen fragment)
+  // 6) Záložně i do hashe (pro případy, kdy WP query ořízne)
   u.hash = aptStr ? 'apt=' + encodeURIComponent(aptStr) : '';
 
   return u.toString();
