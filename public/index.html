@@ -274,17 +274,15 @@
       de:{ none:'', unpaid:'Unbezahlt',   done:'Check-in abgeschlossen' },
     };
 
-    // ===== buildUrl – přesně podle zadání =====
-    function buildUrl(base, lang, alf, apt, door, state){
+function buildUrl(base, lang, alf, apt, door, state){
   const u = new URL(base || 'https://www.hillside18.cz/cs/check-in/');
 
-  // začni s čistými parametry, ať si zachováme pořadí
+  // čistý start kvůli pořadí
   u.search = '';
 
   // 1) APT – vždy první
-  if (apt && String(apt).trim().length) {
-    u.searchParams.set('apt', String(apt).trim());
-  }
+  const aptStr = (apt && String(apt).trim().length) ? String(apt).trim() : '';
+  if (aptStr) u.searchParams.set('apt', aptStr);
 
   // 2) Door jen když je vyplněn
   if (door) u.searchParams.set('door', door);
@@ -301,6 +299,9 @@
   // 5) Stav (unpaid/done)
   if (state === 'unpaid') u.searchParams.set('unpaid', '1');
   if (state === 'done')   u.searchParams.set('done', '1');
+
+  // 6) ZÁLOŽNÍ FRAGMENT pro šablony, co čtou hash místo query
+  u.hash = aptStr ? 'apt=' + encodeURIComponent(aptStr) : '';
 
   return u.toString();
 }
