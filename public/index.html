@@ -324,77 +324,197 @@ function buildUrl(base, lang, alf, apt, door, state){
       return (gender==='female' ? 'Frau' : 'Herr') + (last ? ' '+last : '');
     }
 
-    function makeTexts(urls, door, st, fullName, isFemaleSel){
-      const sCS = salutation('cs', fullName, isFemaleSel);
-      const sEN = salutation('en', fullName, isFemaleSel);
-      const sDE = salutation('de', fullName, isFemaleSel);
+   function makeTexts(urls, door, st, fullName, isFemaleSel){
+  const sCS = salutation('cs', fullName, isFemaleSel);
+  const sEN = salutation('en', fullName, isFemaleSel);
+  const sDE = salutation('de', fullName, isFemaleSel);
 
-      const doorPartCS = door ? `Váš kód k hlavním dveřím: ${door}.` : `Kód k hlavním dveřím bude doplněn po dokončení on-line check-inu (na stránce uvidíte „xxxx“ do té doby).`;
-      const doorPartEN = door ? `Your main door code: ${door}.` : `The main door code will be provided after the online check-in is completed (you will see “xxxx” until then).`;
-      const doorPartDE = door ? `Ihr Haustür-Code: ${door}.` : `Der Haustür-Code wird nach dem Online-Check-in bereitgestellt (bis dahin sehen Sie „xxxx“).`;
+  const phoneMain   = '+420 840 113 114';
+  const phoneOnsite = '+420 731 990 087';
 
-      const stCS = stateTexts.cs[st]; const stEN = stateTexts.en[st]; const stDE = stateTexts.de[st];
-      const badgeCS = stCS ? ` (${stCS})` : '';
-      const badgeEN = stEN ? ` (${stEN})` : '';
-      const badgeDE = stDE ? ` (${stDE})` : '';
+  // --- Door lines podle stavu ---
+  const doorLineCS = (state)=>{
+    if (door) return `Váš kód k hlavním dveřím: ${door}.`;
+    if (state === 'unpaid') return 'Kód k hlavním dveřím se zobrazí po připsání platby.';
+    if (state === 'done') return ''; // hotovo, nic neslibujeme
+    return 'Kód k hlavním dveřím bude doplněn po dokončení on-line check-inu (do té doby uvidíte „xxxx“).';
+  };
+  const doorLineEN = (state)=>{
+    if (door) return `Your main door code: ${door}.`;
+    if (state === 'unpaid') return 'The main door code will appear once the payment is received.';
+    if (state === 'done') return '';
+    return 'The main door code will be shown after completing the online check-in (you will see “xxxx” until then).';
+  };
+  const doorLineDE = (state)=>{
+    if (door) return `Ihr Haustür-Code: ${door}.`;
+    if (state === 'unpaid') return 'Der Haustür-Code erscheint nach Zahlungseingang.';
+    if (state === 'done') return '';
+    return 'Der Haustür-Code wird nach Abschluss des Online-Check-ins angezeigt (bis dahin sehen Sie „xxxx“).';
+  };
 
-      const phoneMain = '+420 840 113 114';
-      const phoneOnsite = '+420 731 990 087';
+  // --- Těla zpráv podle stavu ---
+  let sms_cs, mail_cs, sms_en, mail_en, sms_de, mail_de;
 
-      const sms_cs =
-`${sCS}, prosíme o on-line check-in pro Hillside 18${badgeCS}:
+  if (st === 'unpaid') {
+    // CZ
+    sms_cs =
+`${sCS}, on-line check-in je hotový, prosíme dokončit platbu pro Hillside 18:
 ${urls.cs}
-${doorPartCS}
+${doorLineCS('unpaid')}
 Recepce: ${phoneMain} • Podpora: ${phoneOnsite}`;
-
-      const mail_cs =
+    mail_cs =
 `Dobrý den ${sCS},
-posíláme vám odkaz na informace k příjezdu do Hillside 18${badgeCS}:
+on-line check-in je dokončen. Prosíme ještě o dokončení platby. Vše potřebné najdete zde:
 ${urls.cs}
 
-${doorPartCS}
+${doorLineCS('unpaid')}
 
 Recepce: ${phoneMain}
 Podpora na místě: ${phoneOnsite}
 Děkujeme a přejeme příjemný pobyt!`;
 
-      const sms_en =
-`${sEN}, please complete the online check-in for Hillside 18${badgeEN}:
+    // EN
+    sms_en =
+`${sEN}, your online check-in is complete — please finalize the payment for Hillside 18:
 ${urls.en}
-${doorPartEN}
+${doorLineEN('unpaid')}
 Reception: ${phoneMain} • On-site: ${phoneOnsite}`;
-
-      const mail_en =
+    mail_en =
 `Dear ${sEN},
-here is your arrival info link for Hillside 18${badgeEN}:
+your online check-in is complete. Please finalize the payment. Everything you need is here:
 ${urls.en}
 
-${doorPartEN}
+${doorLineEN('unpaid')}
 
 Reception: ${phoneMain}
 On-site support: ${phoneOnsite}
 Thank you and enjoy your stay!`;
 
-      const sms_de =
-`${sDE}, bitte füllen Sie das Online-Check-in für Hillside 18 aus${badgeDE}:
+    // DE
+    sms_de =
+`${sDE}, Ihr Online-Check-in ist abgeschlossen — bitte schließen Sie noch die Zahlung ab:
 ${urls.de}
-${doorPartDE}
+${doorLineDE('unpaid')}
 Rezeption: ${phoneMain} • Vor Ort: ${phoneOnsite}`;
-
-      const mail_de =
+    mail_de =
 `Guten Tag ${sDE},
-hier ist Ihr Anreise-Link für Hillside 18${badgeDE}:
+Ihr Online-Check-in ist abgeschlossen. Bitte schließen Sie noch die Zahlung ab. Alles Nötige finden Sie hier:
 ${urls.de}
 
-${doorPartDE}
+${doorLineDE('unpaid')}
 
 Rezeption: ${phoneMain}
 Vor-Ort-Support: ${phoneOnsite}
 Vielen Dank und einen angenehmen Aufenthalt!`;
 
-      return { sms_cs, mail_cs, sms_en, mail_en, sms_de, mail_de };
-    }
+  } else if (st === 'done') {
+    // CZ
+    sms_cs =
+`${sCS}, děkujeme — on-line check-in je hotový. Informace k příjezdu pro Hillside 18:
+${urls.cs}
+${doorLineCS('done')}
+Recepce: ${phoneMain} • Podpora: ${phoneOnsite}`;
+    mail_cs =
+`Dobrý den ${sCS},
+děkujeme — on-line check-in je hotový. Níže je odkaz na informace k příjezdu:
+${urls.cs}
 
+${doorLineCS('done')}
+
+Recepce: ${phoneMain}
+Podpora na místě: ${phoneOnsite}
+Těšíme se na vás!`;
+
+    // EN
+    sms_en =
+`${sEN}, thank you — the online check-in is complete. Arrival information for Hillside 18:
+${urls.en}
+${doorLineEN('done')}
+Reception: ${phoneMain} • On-site: ${phoneOnsite}`;
+    mail_en =
+`Dear ${sEN},
+thank you — your online check-in is complete. Here is your arrival information:
+${urls.en}
+
+${doorLineEN('done')}
+
+Reception: ${phoneMain}
+On-site support: ${phoneOnsite}
+We look forward to hosting you!`;
+
+    // DE
+    sms_de =
+`${sDE}, vielen Dank — das Online-Check-in ist abgeschlossen. Anreise-Informationen für Hillside 18:
+${urls.de}
+${doorLineDE('done')}
+Rezeption: ${phoneMain} • Vor Ort: ${phoneOnsite}`;
+    mail_de =
+`Guten Tag ${sDE},
+vielen Dank — Ihr Online-Check-in ist abgeschlossen. Hier sind Ihre Anreise-Informationen:
+${urls.de}
+
+${doorLineDE('done')}
+
+Rezeption: ${phoneMain}
+Vor-Ort-Support: ${phoneOnsite}
+Wir freuen uns auf Sie!`;
+
+  } else {
+    // NONE (výchozí)
+    // CZ
+    sms_cs =
+`${sCS}, prosíme o on-line check-in pro Hillside 18:
+${urls.cs}
+${doorLineCS('none')}
+Recepce: ${phoneMain} • Podpora: ${phoneOnsite}`;
+    mail_cs =
+`Dobrý den ${sCS},
+prosíme o vyplnění on-line check-inu. Odkaz a informace k příjezdu najdete zde:
+${urls.cs}
+
+${doorLineCS('none')}
+
+Recepce: ${phoneMain}
+Podpora na místě: ${phoneOnsite}
+Děkujeme a přejeme příjemný pobyt!`;
+
+    // EN
+    sms_en =
+`${sEN}, please complete the online check-in for Hillside 18:
+${urls.en}
+${doorLineEN('none')}
+Reception: ${phoneMain} • On-site: ${phoneOnsite}`;
+    mail_en =
+`Dear ${sEN},
+please complete the online check-in. The link and arrival information are here:
+${urls.en}
+
+${doorLineEN('none')}
+
+Reception: ${phoneMain}
+On-site support: ${phoneOnsite}
+Thank you and enjoy your stay!`;
+
+    // DE
+    sms_de =
+`${sDE}, bitte füllen Sie das Online-Check-in für Hillside 18 aus:
+${urls.de}
+${doorLineDE('none')}
+Rezeption: ${phoneMain} • Vor Ort: ${phoneOnsite}`;
+    mail_de =
+`Guten Tag ${sDE},
+bitte füllen Sie das Online-Check-in aus. Den Link und die Anreise-Informationen finden Sie hier:
+${urls.de}
+
+${doorLineDE('none')}
+
+Rezeption: ${phoneMain}
+Vor-Ort-Support: ${phoneOnsite}
+Vielen Dank und einen angenehmen Aufenthalt!`;
+  }
+
+  return { sms_cs, mail_cs, sms_en, mail_en, sms_de, mail_de };
+}
     // ==== AKCE ====
     el('btnBuild').addEventListener('click', ()=>{
       const fullName = trim(el('guestName').value);
