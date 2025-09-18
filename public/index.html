@@ -276,34 +276,34 @@
 
     // ===== buildUrl – přesně podle zadání =====
     function buildUrl(base, lang, alf, apt, door, state){
-      const u = new URL(base || 'https://www.hillside18.cz/cs/check-in/');
+  const u = new URL(base || 'https://www.hillside18.cz/cs/check-in/');
 
-      // Jazyk
-      if (lang === 'en') u.searchParams.set('lang', 'en');
-      else if (lang === 'de') u.searchParams.set('lang', 'de');
-      else u.searchParams.delete('lang'); // cs → bez parametru
+  // začni s čistými parametry, ať si zachováme pořadí
+  u.search = '';
 
-      // Alfréd (plná URL i kód)
-      if (/^https?:\/\//i.test(alf)) u.searchParams.set('alf', alf);
-      else if (alf) u.searchParams.set('alf', 'https://alfred.previo.app/login/' + encodeURIComponent(alf));
-      else u.searchParams.delete('alf');
+  // 1) APT – vždy první
+  if (apt && String(apt).trim().length) {
+    u.searchParams.set('apt', String(apt).trim());
+  }
 
-      // APT – vždy vymaž a znovu nastav
-      u.searchParams.delete('apt');
-      if (apt && String(apt).trim().length) u.searchParams.set('apt', String(apt).trim());
+  // 2) Door jen když je vyplněn
+  if (door) u.searchParams.set('door', door);
 
-      // Door jen když je vyplněn
-      u.searchParams.delete('door');
-      if (door) u.searchParams.set('door', door);
+  // 3) Alfréd (plná URL i kód)
+  if (/^https?:\/\//i.test(alf)) u.searchParams.set('alf', alf);
+  else if (alf) u.searchParams.set('alf', 'https://alfred.previo.app/login/' + encodeURIComponent(alf));
 
-      // Stav (unpaid/done)
-      u.searchParams.delete('unpaid');
-      u.searchParams.delete('done');
-      if (state === 'unpaid') u.searchParams.set('unpaid', '1');
-      if (state === 'done') u.searchParams.set('done', '1');
+  // 4) Jazyk
+  if (lang === 'en') u.searchParams.set('lang', 'en');
+  else if (lang === 'de') u.searchParams.set('lang', 'de');
+  // cs → bez parametru
 
-      return u.toString();
-    }
+  // 5) Stav (unpaid/done)
+  if (state === 'unpaid') u.searchParams.set('unpaid', '1');
+  if (state === 'done')   u.searchParams.set('done', '1');
+
+  return u.toString();
+}
 
     function salutation(lang, fullName, isFemaleSel){
       const last = getLastname(fullName);
