@@ -274,35 +274,42 @@
       de:{ none:'', unpaid:'Unbezahlt',   done:'Check-in abgeschlossen' },
     };
 
-    function buildUrl(base, lang, alf, apt, door, state){
+function buildUrl(base, lang, alf, apt, door, state){
   const u = new URL(base || SITE_CZ);
 
-  // jazyk
-  if (lang === 'en') u.searchParams.set('lang','en');
-  else if (lang === 'de') u.searchParams.set('lang','de');
+  // Jazyk
+  if (lang === 'en') u.searchParams.set('lang', 'en');
+  else if (lang === 'de') u.searchParams.set('lang', 'de');
   else u.searchParams.delete('lang'); // cs → bez parametru
 
-  // Alfréd (kód i plná URL)
-  if (isUrl(alf)) u.searchParams.set('alf', alf);
-  else if (alf)   u.searchParams.set('alf','https://alfred.previo.app/login/'+encodeURIComponent(alf));
-  else            u.searchParams.delete('alf');
+  // Alfréd (povol plnou URL i samotný kód)
+  if (isUrl(alf)) {
+    u.searchParams.set('alf', alf);
+  } else if (alf) {
+    u.searchParams.set('alf', 'https://alfred.previo.app/login/' + encodeURIComponent(alf));
+  } else {
+    u.searchParams.delete('alf');
+  }
 
-  // APT: vymaž a znovu nastav (aby se nikdy “neztratilo”)
+  // APT – vždy nejdřív vymaž a pak nastav (spolehlivé i po případných redirectech)
   u.searchParams.delete('apt');
-  if (apt && String(apt).trim().length) u.searchParams.set('apt', String(apt).trim());
+  if (apt && String(apt).trim().length) {
+    u.searchParams.set('apt', String(apt).trim());
+  }
 
-  // Door jen když je vyplněné
+  // Door jen pokud vyplněn
   u.searchParams.delete('door');
   if (door) u.searchParams.set('door', door);
 
   // Stav
   u.searchParams.delete('unpaid');
   u.searchParams.delete('done');
-  if (state === 'unpaid') u.searchParams.set('unpaid','1');
-  if (state === 'done')   u.searchParams.set('done','1');
+  if (state === 'unpaid') u.searchParams.set('unpaid', '1');
+  if (state === 'done')   u.searchParams.set('done', '1');
 
   return u.toString();
 }
+
 
 
     function salutation(lang, fullName, isFemaleSel){
