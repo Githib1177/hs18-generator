@@ -275,24 +275,35 @@
     };
 
     function buildUrl(base, lang, alf, apt, door, state){
-      let u = new URL(base || SITE_CZ);
-      if(lang==='en') u.searchParams.set('lang','en');
-      if(lang==='de') u.searchParams.set('lang','de');
+  const u = new URL(base || SITE_CZ);
 
-      if(isUrl(alf)){
-        u.searchParams.set('alf', alf);
-      }else if(alf){
-        u.searchParams.set('alf', 'https://alfred.previo.app/login/'+encodeURIComponent(alf));
-      }
-      if(apt) u.searchParams.set('apt', apt);
-      // door jen pokud je zadán (jinak se na cíli zobrazí xxxx + tvoje hláška)
-      if(door) u.searchParams.set('door', door);
+  // jazyk
+  if (lang === 'en') u.searchParams.set('lang','en');
+  else if (lang === 'de') u.searchParams.set('lang','de');
+  else u.searchParams.delete('lang'); // cs → bez parametru
 
-      if(state==='unpaid') u.searchParams.set('unpaid','1');
-      if(state==='done')   u.searchParams.set('done','1');
+  // Alfréd (kód i plná URL)
+  if (isUrl(alf)) u.searchParams.set('alf', alf);
+  else if (alf)   u.searchParams.set('alf','https://alfred.previo.app/login/'+encodeURIComponent(alf));
+  else            u.searchParams.delete('alf');
 
-      return u.toString();
-    }
+  // APT: vymaž a znovu nastav (aby se nikdy “neztratilo”)
+  u.searchParams.delete('apt');
+  if (apt && String(apt).trim().length) u.searchParams.set('apt', String(apt).trim());
+
+  // Door jen když je vyplněné
+  u.searchParams.delete('door');
+  if (door) u.searchParams.set('door', door);
+
+  // Stav
+  u.searchParams.delete('unpaid');
+  u.searchParams.delete('done');
+  if (state === 'unpaid') u.searchParams.set('unpaid','1');
+  if (state === 'done')   u.searchParams.set('done','1');
+
+  return u.toString();
+}
+
 
     function salutation(lang, fullName, isFemaleSel){
   const last = getLastname(fullName);
