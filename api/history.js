@@ -97,6 +97,6 @@ export default async function handler(req, res) {
     return send(res, 405, { ok: false, error: 'Method not allowed' });
   } catch (error) {
     console.error('[history] error:', error.message);
-    return send(res, 500, { ok: false, error: 'Sdílenou historii se nepodařilo načíst nebo uložit' });
+    return send(res, 500, { ok: false, error: `Historie: ${error.message}` });
   }
 }
