@@ -25,7 +25,6 @@ function redisConfig() {
     url:
       process.env.UPSTASH_REDIS_REST_URL ||
       process.env.KV_REST_API_URL ||
-      process.env.UPSTASH_REDIS_REST_KV_URL ||
       process.env.UPSTASH_REDIS_REST_KV_REST_API_URL,
     token:
       process.env.UPSTASH_REDIS_REST_TOKEN ||
@@ -97,6 +96,6 @@ export default async function handler(req, res) {
     return send(res, 405, { ok: false, error: 'Method not allowed' });
   } catch (error) {
     console.error('[history] error:', error.message);
-    return send(res, 500, { ok: false, error: `Historie: ${error.message}` });
+    return send(res, 500, { ok: false, error: 'Sdílenou historii se nepodařilo načíst nebo uložit' });
   }
 }
