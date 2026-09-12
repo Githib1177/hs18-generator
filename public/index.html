@@ -127,16 +127,15 @@
     <div class="card" id="historyCard">
       <div style="display:flex;gap:10px;align-items:end;justify-content:space-between;flex-wrap:wrap">
         <div class="field" style="min-width:260px;flex:1">
-          <label for="historyAccessKey">Přístupový klíč historie</label>
-          <input id="historyAccessKey" type="password" autocomplete="current-password" placeholder="Zadejte klíč pro sdílenou historii">
-          <div class="muted">Klíč se uchovává jen do zavření prohlížeče.</div>
+          <strong>Sdílená historie odeslaných zpráv</strong>
+          <div class="muted">Načítá se automaticky na každém zařízení.</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button id="btnLoadHistory" class="btn btn-dark">Načíst historii</button>
           <button id="btnClearHistory" class="btn btn-ghost">Smazat historii</button>
         </div>
       </div>
-      <div id="historyStatus" class="muted" style="margin-top:8px">Zadejte klíč a načtěte sdílenou historii.</div>
+      <div id="historyStatus" class="muted" style="margin-top:8px">Načítám sdílenou historii…</div>
       <div id="historyTableWrap" style="margin-top:10px;display:none;overflow:auto">
         <table class="tbl" id="historyTable">
           <thead><tr><th>Čas</th><th>Host</th><th>APT</th><th>Stav</th><th>Jazyk</th><th>Telefon</th></tr></thead>
@@ -298,14 +297,14 @@
     };
 
     // ==== SDÍLENÁ HISTORIE ====
+    const HISTORY_ACCESS_KEY = 'HS18-gRxXdW-MC5-C';
+
     function historyAccessKey(){
-      return trim(el('historyAccessKey').value);
+      return HISTORY_ACCESS_KEY;
     }
 
     async function historyRequest(method, body){
       const key = historyAccessKey();
-      if(!key) throw new Error('Nejdříve zadejte přístupový klíč historie.');
-      sessionStorage.setItem('hs18_history_access_key', key);
       const response = await fetch(HISTORY_API_URL, {
         method,
         headers:{'Content-Type':'application/json', 'X-History-Key':key},
@@ -377,17 +376,13 @@
       }
     }
 
-    el('historyAccessKey').value = sessionStorage.getItem('hs18_history_access_key') || '';
     el('btnLoadHistory').addEventListener('click', loadSharedHistory);
-    el('historyAccessKey').addEventListener('keydown', event=>{
-      if(event.key === 'Enter') loadSharedHistory();
-    });
     el('btnClearHistory').addEventListener('click', async ()=>{
       if(!confirm('Opravdu smazat sdílenou historii na všech zařízeních?')) return;
       try { renderHistory(await historyRequest('DELETE')); }
       catch(error){ el('historyStatus').textContent = '❌ ' + error.message; }
     });
-    if(historyAccessKey()) loadSharedHistory();
+    loadSharedHistory();
 
 function buildUrl(base, lang, alf, apt, door, state){
   const u = new URL(base || 'https://www.hillside18.cz/cs/check-in/');
