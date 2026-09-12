@@ -49,6 +49,9 @@
     .reservation-state-card.state-incomplete .state-preview{background:#fee2e2;color:#991b1b}
     .reservation-state-card.state-done{background:#ecfdf5!important;border-color:#86efac!important;box-shadow:inset 4px 0 0 #16a34a!important}
     .reservation-state-card.state-done .state-preview{background:#dcfce7;color:#166534}
+    .door-send-status{margin-top:8px;font-weight:800}
+    .state-incomplete .door-send-status{color:#b91c1c}
+    .state-done .door-send-status{color:#15803d}
     @media (max-width:720px){
       .row,.row-3,.row-4,.grid2{grid-template-columns:1fr}
       .right{justify-content:flex-start}
@@ -116,6 +119,7 @@
           <label class="switch-card"><input id="paymentComplete" type="checkbox"><span>Zaplaceno</span></label>
         </div>
         <div id="statePreview" class="state-preview">Čeká na dokončení check-inu – odkaz bez stavového parametru</div>
+        <div id="doorSendStatus" class="door-send-status">Kód dveří nebyl odeslán – host uvidí xxxx.</div>
       </div>
 
       <div class="row-3" style="margin-top:10px">
@@ -338,6 +342,10 @@
         : state === 'unpaid'
           ? 'Check-in je hotový, čeká se na platbu – odkaz obsahuje unpaid=1'
           : 'Čeká na dokončení check-inu – odkaz bez stavového parametru';
+      const hasDoor = Boolean(trim(el('door').value));
+      el('doorSendStatus').textContent = state === 'done'
+        ? (hasDoor ? 'Kód dveří bude přidán do odkazu.' : 'Kód dveří není vyplněn – host uvidí xxxx.')
+        : 'Kód dveří nebyl odeslán – host uvidí xxxx.';
     }
 
     function setReservationState(state){
@@ -432,6 +440,7 @@
     });
     el('checkinComplete').addEventListener('change', updateReservationState);
     el('paymentComplete').addEventListener('change', updateReservationState);
+    el('door').addEventListener('input', updateReservationState);
     updateReservationState();
     el('btnClearHistory').addEventListener('click', async ()=>{
       if(!confirm('Opravdu smazat sdílenou historii na všech zařízeních?')) return;
@@ -718,6 +727,9 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
       // náhled kódu dveří (respektuje tvoji logiku na cíli)
       el('doorPreview').textContent = door || 'xxxx';
       el('doorInfoCard').style.display = '';
+      el('doorSendStatus').textContent = state === 'done' && door
+        ? 'Kód dveří byl přidán do vytvořeného odkazu.'
+        : 'Kód dveří nebyl odeslán – host uvidí xxxx.';
 
       // texty
       const T = makeTexts(urls, door, state, fullName, isFemaleSel);
