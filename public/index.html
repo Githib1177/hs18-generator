@@ -36,6 +36,14 @@
     .urls a{display:inline-block;margin:6px 8px 0 0;text-decoration:none}
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
     .right{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+    .choice-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+    .choice-btn{border:2px solid #dbe5e0;background:#fff;color:var(--dark);border-radius:12px;padding:10px;font-weight:800;cursor:pointer}
+    .choice-btn.active{background:var(--dark);border-color:var(--dark);color:#fff}
+    .switches{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .switch-card{display:flex;align-items:center;gap:10px;border:2px solid #dbe5e0;border-radius:12px;padding:10px 12px;cursor:pointer;background:#fff}
+    .switch-card:has(input:checked){border-color:var(--accent);background:#ecfdf5}
+    .switch-card input{width:20px;height:20px;accent-color:var(--accent)}
+    .state-preview{margin-top:8px;padding:8px 10px;border-radius:10px;background:#f0faf5;color:var(--dark);font-weight:700}
     @media (max-width:720px){
       .row,.row-3,.row-4,.grid2{grid-template-columns:1fr}
       .right{justify-content:flex-start}
@@ -79,8 +87,14 @@
           <input id="alf" placeholder="SEZHFS nebo https://alfred.previo.app/login/SEZHFS">
         </div>
         <div class="field">
-          <label>Číslo rezervace / APT (apt)</label>
-          <input id="apt" placeholder="např. 3248">
+          <label>Apartmán</label>
+          <input id="apt" type="hidden" value="">
+          <div class="choice-grid" id="apartmentChoices">
+            <button type="button" class="choice-btn" data-apt="1">1</button>
+            <button type="button" class="choice-btn" data-apt="2">2</button>
+            <button type="button" class="choice-btn" data-apt="3">3</button>
+            <button type="button" class="choice-btn" data-apt="4">4</button>
+          </div>
         </div>
         <div class="field">
           <label>Kód dveří (door) – volitelné</label>
@@ -88,15 +102,17 @@
         </div>
       </div>
 
-      <div class="row-4" style="margin-top:10px">
-        <div class="field">
-          <label>Stav rezervace</label>
-          <select id="state">
-            <option value="none" selected>Žádný speciální stav</option>
-            <option value="unpaid">Nezaplaceno (unpaid=1)</option>
-            <option value="done">Check-in hotový (done=1)</option>
-          </select>
+      <div class="card" style="margin-top:12px;background:#f8fafc;box-shadow:none;border:1px solid #e5e7eb">
+        <label>Stav rezervace</label>
+        <input id="state" type="hidden" value="none">
+        <div class="switches" style="margin-top:8px">
+          <label class="switch-card"><input id="checkinComplete" type="checkbox"><span>Check-in všech hostů dokončen</span></label>
+          <label class="switch-card"><input id="paymentComplete" type="checkbox"><span>Zaplaceno</span></label>
         </div>
+        <div id="statePreview" class="state-preview">Čeká na dokončení check-inu – odkaz bez stavového parametru</div>
+      </div>
+
+      <div class="row-3" style="margin-top:10px">
         <div class="field">
           <label>Telefon (pro odeslání SMS)</label>
           <input id="phone" placeholder="+420 777 123 456">
@@ -296,6 +312,32 @@
       de:{ none:'', unpaid:'Unbezahlt',   done:'Check-in abgeschlossen' },
     };
 
+    function setApartment(value){
+      const apt = ['1','2','3','4'].includes(String(value)) ? String(value) : '';
+      el('apt').value = apt;
+      document.querySelectorAll('[data-apt]').forEach(button=>{
+        button.classList.toggle('active', button.dataset.apt === apt);
+      });
+    }
+
+    function updateReservationState(){
+      const checkedIn = el('checkinComplete').checked;
+      const paid = el('paymentComplete').checked;
+      const state = checkedIn ? (paid ? 'done' : 'unpaid') : 'none';
+      el('state').value = state;
+      el('statePreview').textContent = state === 'done'
+        ? 'Vše hotovo – odkaz obsahuje done=1'
+        : state === 'unpaid'
+          ? 'Check-in je hotový, čeká se na platbu – odkaz obsahuje unpaid=1'
+          : 'Čeká na dokončení check-inu – odkaz bez stavového parametru';
+    }
+
+    function setReservationState(state){
+      el('checkinComplete').checked = state === 'unpaid' || state === 'done';
+      el('paymentComplete').checked = state === 'done';
+      updateReservationState();
+    }
+
     // ==== SDÍLENÁ HISTORIE ====
     const HISTORY_ACCESS_KEY = 'HS18-gRxXdW-MC5-C';
 
@@ -319,9 +361,9 @@
       el('guestName').value = item.guestName || '';
       el('guestIsFemale').value = item.guestIsFemale || 'auto';
       el('alf').value = item.alf || '';
-      el('apt').value = item.apt || '';
+      setApartment(item.apt || '');
       el('door').value = item.door || '';
-      el('state').value = item.state || 'none';
+      setReservationState(item.state || 'none');
       el('phone').value = item.phone || '';
       el('lang').value = item.lang || 'cs';
       el('baseUrl').value = item.baseUrl || SITE_CZ;
@@ -377,6 +419,12 @@
     }
 
     el('btnLoadHistory').addEventListener('click', loadSharedHistory);
+    document.querySelectorAll('[data-apt]').forEach(button=>{
+      button.addEventListener('click', ()=>setApartment(button.dataset.apt));
+    });
+    el('checkinComplete').addEventListener('change', updateReservationState);
+    el('paymentComplete').addEventListener('change', updateReservationState);
+    updateReservationState();
     el('btnClearHistory').addEventListener('click', async ()=>{
       if(!confirm('Opravdu smazat sdílenou historii na všech zařízeních?')) return;
       try { renderHistory(await historyRequest('DELETE')); }
@@ -396,6 +444,7 @@ function buildUrl(base, lang, alf, apt, door, state){
     u.searchParams.set('apt', aptStr);             // primární (CZ)
     u.searchParams.set('apartment', aptStr);       // alias (EN/DE)
     u.searchParams.set('apartment_no', aptStr);    // alias (EN/DE)
+    if (/^[1-4]$/.test(aptStr)) u.searchParams.set(`apt${aptStr}`, '1');
   }
 
   // 2) Door jen když je vyplněn
