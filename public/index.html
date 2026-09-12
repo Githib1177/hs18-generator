@@ -98,7 +98,8 @@
         </div>
         <div class="field">
           <label>Kód dveří (door) – volitelné</label>
-          <input id="door" placeholder="např. 2580 (nech prázdné ⇒ na stránce se zobrazí xxxx)">
+          <input id="door" placeholder="např. 2580">
+          <div class="muted">Kód zůstane uložený, ale hostovi se zobrazí až ve stavu „Vše hotovo“.</div>
         </div>
       </div>
 
@@ -175,7 +176,7 @@
       <h3 style="margin:0 0 8px">Kód dveří (preview)</h3>
       <div class="boxcode" id="doorPreview">xxxx</div>
       <div class="muted" style="margin-top:6px">
-        Pokud kód dveří ponecháš prázdný, **neposílá se v URL** a na cílové stránce se zobrazí <b>xxxx</b> a tvoje hláška (beze změny).
+        Kód se odešle pouze ve stavu <b>Vše hotovo</b>. V ostatních stavech se do URL neposílá a host uvidí <b>xxxx</b>.
       </div>
     </div>
 
@@ -680,8 +681,9 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
       const isFemaleSel = el('guestIsFemale').value;
       const alf = trim(el('alf').value);
       const apt = trim(el('apt').value);
-      const door = trim(el('door').value);
+      const storedDoor = trim(el('door').value);
       const state = el('state').value;
+      const door = state === 'done' ? storedDoor : '';
       const base = trim(el('baseUrl').value) || SITE_CZ;
       const lang = el('lang').value;
 
