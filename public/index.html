@@ -137,8 +137,8 @@
           </select>
         </div>
         <div class="field">
-          <label>Base URL stránky (WP)</label>
-          <input id="baseUrl" value="https://www.hillside18.cz/cs/check-in/">
+          <label>Adresa portálu pro hosta</label>
+          <input id="baseUrl" value="https://hillside18-guest-portal.vercel.app/">
           <div class="muted">Pro EN/DE se přidá <code>?lang=en</code>/<code>?lang=de</code>.</div>
         </div>
       </div>
@@ -266,7 +266,7 @@
     <div class="card">
       <div class="muted">
         Tip: do URL Link Builderu můžeš předvyplnit <code>alf</code>, <code>apt</code>, <code>lang</code>, <code>unpaid=1</code>, a volitelně <code>door</code>.<br>
-        Příklad (EN): <span class="pill">https://www.hillside18.cz/cs/check-in/?lang=en&amp;alf=…&amp;apt=3248&amp;unpaid=1</span>
+        Příklad (EN): <span class="pill">https://hillside18-guest-portal.vercel.app/?lang=en&amp;alf=…&amp;apt=2&amp;unpaid=1</span>
       </div>
     </div>
   </div>
@@ -275,7 +275,16 @@
     // ==== KONSTANTY ====
     const SMS_API_URL = '/api/send-sms'; // stejný endpoint jako Link Builder
     const HISTORY_API_URL = '/api/history';
-    const SITE_CZ = 'https://www.hillside18.cz/cs/check-in/';
+    const SITE_CZ = 'https://hillside18-guest-portal.vercel.app/';
+    function portalBase(value){
+      const raw = (value || '').trim();
+      if (!raw) return SITE_CZ;
+      try {
+        const u = new URL(raw);
+        if (['www.hillside18.cz', 'hillside18.cz'].includes(u.hostname) && /^\/(cs|en|de)\/check-in\/?$/.test(u.pathname)) return SITE_CZ;
+      } catch {}
+      return raw;
+    }
 
     // ==== UTIL ====
     function trim(s){ return (s||'').trim(); }
@@ -382,7 +391,7 @@
       setReservationState(item.state || 'none');
       el('phone').value = item.phone || '';
       el('lang').value = item.lang || 'cs';
-      el('baseUrl').value = item.baseUrl || SITE_CZ;
+      el('baseUrl').value = portalBase(item.baseUrl);
       el('historyStatus').textContent = `Formulář byl vyplněn ze záznamu: ${item.guestName || item.phone}.`;
     }
 
@@ -450,7 +459,7 @@
     loadSharedHistory();
 
 function buildUrl(base, lang, alf, apt, door, state){
-  const u = new URL(base || 'https://www.hillside18.cz/cs/check-in/');
+  const u = new URL(portalBase(base));
 
   // začneme čistě kvůli pevnému pořadí parametrů
   u.search = '';
@@ -700,7 +709,8 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
       const storedDoor = trim(el('door').value);
       const state = el('state').value;
       const door = state === 'done' ? storedDoor : '';
-      const base = trim(el('baseUrl').value) || SITE_CZ;
+      const base = portalBase(el('baseUrl').value);
+      el('baseUrl').value = base;
       const lang = el('lang').value;
 
       if(!alf || !apt){
