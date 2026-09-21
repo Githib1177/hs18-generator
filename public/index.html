@@ -326,9 +326,9 @@
     const el = id => document.getElementById(id);
 
     const stateTexts = {
-      cs:{ none:'', unpaid:'Nezaplaceno', done:'Check-in hotový' },
-      en:{ none:'', unpaid:'Unpaid',      done:'Check-in completed' },
-      de:{ none:'', unpaid:'Unbezahlt',   done:'Check-in abgeschlossen' },
+      cs:{ paid:'Zaplaceno, čeká check-in', none:'', unpaid:'Nezaplaceno', done:'Check-in hotový' },
+      en:{ paid:'Paid, check-in pending', none:'', unpaid:'Unpaid',      done:'Check-in completed' },
+      de:{ paid:'Bezahlt, Check-in ausstehend', none:'', unpaid:'Unbezahlt',   done:'Check-in abgeschlossen' },
     };
 
     function setApartment(value){
@@ -342,7 +342,7 @@
     function updateReservationState(){
       const checkedIn = el('checkinComplete').checked;
       const paid = el('paymentComplete').checked;
-      const state = checkedIn ? (paid ? 'done' : 'unpaid') : 'none';
+      const state = checkedIn ? (paid ? 'done' : 'unpaid') : (paid ? 'paid' : 'none');
       el('state').value = state;
       el('reservationStateCard').classList.toggle('state-done', state === 'done');
       el('reservationStateCard').classList.toggle('state-incomplete', state !== 'done');
@@ -350,7 +350,7 @@
         ? 'Vše hotovo – odkaz obsahuje done=1'
         : state === 'unpaid'
           ? 'Check-in je hotový, čeká se na platbu – odkaz obsahuje unpaid=1'
-          : 'Čeká na dokončení check-inu – odkaz bez stavového parametru';
+          : state === 'paid' ? 'Platba je vyřízena, zbývá check-in – odkaz obsahuje paid=1' : 'Čeká na check-in a platbu – odkaz bez stavového parametru';
       const hasDoor = Boolean(trim(el('door').value));
       el('doorSendStatus').textContent = state === 'done'
         ? (hasDoor ? 'Kód dveří bude přidán do odkazu.' : 'Kód dveří není vyplněn – host uvidí xxxx.')
@@ -359,7 +359,7 @@
 
     function setReservationState(state){
       el('checkinComplete').checked = state === 'unpaid' || state === 'done';
-      el('paymentComplete').checked = state === 'done';
+      el('paymentComplete').checked = state === 'done' || state === 'paid';
       updateReservationState();
     }
 
@@ -485,7 +485,8 @@ function buildUrl(base, lang, alf, apt, door, state){
   else if (lang === 'de') u.searchParams.set('lang', 'de');
   // cs → bez parametru
 
-  // 5) Stav (unpaid/done)
+  // 5) Stav (paid/unpaid/done)
+  if (state === 'paid') u.searchParams.set('paid', '1');
   if (state === 'unpaid') u.searchParams.set('unpaid', '1');
   if (state === 'done')   u.searchParams.set('done', '1');
 
@@ -698,6 +699,14 @@ Vor-Ort-Support: ${phoneOnsite}
 Vielen Dank und einen angenehmen Aufenthalt!`;
   }
 
+  if (st === 'paid') {
+    const cs = 'Platba je vyřízena. Zbývá dokončit on-line check-in za všechny hosty.\n';
+    const en = 'Payment is complete. Only online check-in for all guests remains.\n';
+    const de = 'Die Zahlung ist erledigt. Bitte schließen Sie noch den Online-Check-in für alle Gäste ab.\n';
+    sms_cs=cs+sms_cs; mail_cs=cs+mail_cs;
+    sms_en=en+sms_en; mail_en=en+mail_en;
+    sms_de=de+sms_de; mail_de=de+mail_de;
+  }
   return { sms_cs, mail_cs, sms_en, mail_en, sms_de, mail_de };
 }
     // ==== AKCE ====
