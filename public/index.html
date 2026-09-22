@@ -257,7 +257,7 @@
       <div id="smsStatus" class="muted" style="margin-top:8px"></div>
       <div id="smsTableWrap" style="margin-top:10px;display:none">
         <table class="tbl" id="smsTable">
-          <thead><tr><th>Číslo</th><th>Stav</th><th>Err</th><th>Pokus</th><th>Endpoint</th></tr></thead>
+          <thead><tr><th>Číslo</th><th>Stav</th><th>Chyba</th><th>Pokus</th><th>Endpoint</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -707,6 +707,25 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
     sms_en=en+sms_en; mail_en=en+mail_en;
     sms_de=de+sms_de; mail_de=de+mail_de;
   }
+  // SMS stays concise; full arrival details remain in the portal and email.
+  const smsUrls = {};
+  for (const lang of ['cs','en','de']) {
+    const u = new URL(urls[lang]);
+    for (const key of ['apartment','apartment_no','apt1','apt2','apt3','apt4']) u.searchParams.delete(key);
+    u.hash = '';
+    const alf = u.searchParams.get('alf') || '';
+    const match = alf.match(/^https:\/\/alfred\.previo\.app\/login\/([A-Za-z0-9_-]+)\/?$/);
+    if (match) u.searchParams.set('alf', match[1]);
+    smsUrls[lang] = u.toString();
+  }
+  const smsState = {
+    cs: {paid:'Platba je vyřízena. Zbývá online check-in všech hostů.',unpaid:'Check-in je hotový. Zbývá platba v Alfrédovi.',done:'Vše je připraveno. Přejeme příjemný pobyt.',none:'Před příjezdem dokončete check-in všech hostů a platbu v Alfrédovi.'},
+    en: {paid:'Payment is complete. Please complete online check-in for all guests.',unpaid:'Check-in complete. Please finish payment in Alfred.',done:'Everything is ready. Enjoy your stay.',none:'Please complete check-in for all guests and payment in Alfred before arrival.'},
+    de: {paid:'Die Zahlung ist erledigt. Bitte den Online-Check-in für alle Gäste abschließen.',unpaid:'Check-in erledigt. Bitte die Zahlung in Alfred abschließen.',done:'Alles ist bereit. Wir wünschen einen schönen Aufenthalt.',none:'Bitte vor Anreise den Check-in für alle Gäste und die Zahlung in Alfred abschließen.'}
+  };
+  sms_cs = 'Hillside 18: ' + smsState.cs[st] + '\n' + smsUrls.cs + (st === 'done' && door ? '\nKód dveří: ' + door : '') + '\nPodpora: +420731990087';
+  sms_en = 'Hillside 18: ' + smsState.en[st] + '\n' + smsUrls.en + (st === 'done' && door ? '\nDoor code: ' + door : '') + '\nSupport: +420731990087';
+  sms_de = 'Hillside 18: ' + smsState.de[st] + '\n' + smsUrls.de + (st === 'done' && door ? '\nTürcode: ' + door : '') + '\nKontakt: +420731990087';
   return { sms_cs, mail_cs, sms_en, mail_en, sms_de, mail_de };
 }
     // ==== AKCE ====
@@ -844,7 +863,7 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
               tr.innerHTML = `
                 <td>${r.to || r.number || '—'}</td>
                 <td>${okBadge}</td>
-                <td>${errCode}</td>
+                <td>${errCode}${r.errMessage ? ": " + String(r.errMessage).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])) : ""}</td>
                 <td>${attempt}</td>
                 <td style="word-break:break-all">${endpoint}</td>
               `;
