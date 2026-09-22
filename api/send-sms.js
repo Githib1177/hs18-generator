@@ -1,190 +1,55 @@
-// api/send-sms.js
-
-// ---------- Pomocné funkce ----------
-function stripDiacritics(s) {
-  if (!s) return '';
-  return s.normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[\r\n]+/g, ' ').trim();
+// SMS Connect accepts at most three 7-bit SMS segments (459 septets).
+export function prepareText(value) {
+  return String(value || '').normalize('NFD').replace(/\p{Diacritic}/gu, '')
+    .replace(/ß/g, 'ss').replace(/[„“”«»]/g, '"').replace(/[‘’]/g, "'")
+    .replace(/[–—]/g, '-').replace(/•/g, '-').replace(/…/g, '...')
+    .replace(/\s+/g, ' ').trim();
 }
-function toUCS2Hex(s) {
-  let hex = '';
-  for (const ch of s) {
-    const code = ch.codePointAt(0);
-    if (code <= 0xffff) {
-      hex += code.toString(16).padStart(4, '0');
-    } else {
-      const cp = code - 0x10000;
-      const hi = 0xd800 + (cp >> 10);
-      const lo = 0xdc00 + (cp & 0x3ff);
-      hex += hi.toString(16).padStart(4, '0') + lo.toString(16).padStart(4, '0');
-    }
-  }
-  return hex;
+export function smsLength(text) {
+  const basic = '@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !"#¤%&\'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà';
+  const extended = '^{}\\[~]|€';
+  let count = 0;
+  for (const ch of text) { if (basic.includes(ch)) count++; else if (extended.includes(ch)) count += 2; else return Infinity; }
+  return count;
 }
-function parseXml(raw) {
-  const errMatch = raw.match(/<err>(-?\d+)<\/err>/);
-  const idMatch  = raw.match(/<sms_id>(\d+)<\/sms_id>/);
-  return { err: errMatch ? Number(errMatch[1]) : null, sms_id: idMatch ? idMatch[1] : null };
-}
-const ERR_MAP = {
-  0: 'OK',
-  1: 'Neznámá chyba',
-  2: 'Neplatný login',
-  3: 'Neplatný hash/heslo',
-  4: 'Neplatný time',
-  5: 'Nepovolená IP',
-  6: 'Neplatná akce / parametry / kódování',
-  7: 'Salt již použit',
-  8: 'Chyba DB',
-  9: 'Nedostatečný kredit',
-  10: 'Neplatné číslo',
-  11: 'Chyba odeslání',
-  12: 'Chybný parametr',
+export const ERR_MAP = {
+  '-1':'Zpráva s tímto identifikátorem již existuje',0:'Přijato SMS bránou',
+  1:'Chyba SMS brány',2:'Neplatné přihlašovací jméno',3:'Chyba přihlášení k SMS bráně',
+  4:'Neplatný čas požadavku',5:'Nepovolená IP adresa',6:'Neplatná akce SMS brány',
+  7:'Duplicitní ověřovací údaj',8:'Chyba databáze SMS brány',9:'Nedostatečný kredit nebo denní limit',
+  10:'Neplatné telefonní číslo',11:'Prázdný text zprávy',12:'Zpráva je příliš dlouhá; zkraťte ji na nejvýše 459 SMS znaků',13:'Neplatné číslo odesílatele'
 };
-
-// ---------- Nízká úroveň: GET/POST volání ----------
-async function callGateway({ method, endpoint, query, body }) {
-  let url = endpoint;
-  const headers = {};
-
-  if (method === 'GET') {
-    url += (endpoint.includes('?') ? '&' : '?') + new URLSearchParams(query).toString();
-  } else {
-    headers['Content-Type'] = 'application/x-www-form-urlencoded';
-  }
-
-  console.log('[send-sms] fetch', { method, endpoint, query: method === 'GET' ? query : undefined, body: method === 'POST' ? body : undefined });
-
-  const r = await fetch(url, {
-    method,
-    headers,
-    body: method === 'POST' ? new URLSearchParams(body).toString() : undefined,
-  });
-
-  const raw = await r.text();
-  console.log('[send-sms] response', { status: r.status, raw });
-
-  const parsed = parseXml(raw);
-  return { http: r.status, raw, ...parsed, errMessage: parsed.err != null ? (ERR_MAP[parsed.err] || 'Neznámá chyba') : 'Neznámá odpověď' };
-}
-
-// ---------- Odeslání jedné SMS s více strategiemi ----------
-async function sendStrategies({ login, password, number, text }) {
-  // Připravíme varianty textu
-  const plain = String(text).replace(/[\r\n]+/g, ' ').trim();  // bez \n
-  const ascii = stripDiacritics(plain);
-  const ucs2hex = toUCS2Hex(plain);
-
-  // Endpoints a pořadí strategií:
-  const ENDPOINTS = [
-    'https://www.smsbrana.cz/smsconnect/http.php',
-    'https://api.smsbrana.cz/smsconnect/http.php',
-  ];
-
-  // 1) GET + ASCII (nejčastěji prochází)
-  for (const ep of ENDPOINTS) {
-    const res = await callGateway({
-      method: 'GET',
-      endpoint: ep,
-      query: {
-        action: 'send_sms',
-        login,
-        password,
-        number,
-        message: ascii,
-      },
-    });
-    if (res.err === 0) return { attempt: 'GET-ascii', endpoint: ep, ...res };
-  }
-
-  // 2) GET + UCS2 (data_code=ucs2 + hex)
-  for (const ep of ENDPOINTS) {
-    const res = await callGateway({
-      method: 'GET',
-      endpoint: ep,
-      query: {
-        action: 'send_sms',
-        login,
-        password,
-        number,
-        data_code: 'ucs2',
-        message: ucs2hex,
-      },
-    });
-    if (res.err === 0) return { attempt: 'GET-ucs2hex', endpoint: ep, ...res };
-  }
-
-  // 3) POST + ASCII
-  for (const ep of ENDPOINTS) {
-    const res = await callGateway({
-      method: 'POST',
-      endpoint: ep,
-      body: {
-        action: 'send_sms',
-        login,
-        password,
-        number,
-        message: ascii,
-      },
-    });
-    if (res.err === 0) return { attempt: 'POST-ascii', endpoint: ep, ...res };
-  }
-
-  // 4) POST + UCS2
-  for (const ep of ENDPOINTS) {
-    const res = await callGateway({
-      method: 'POST',
-      endpoint: ep,
-      body: {
-        action: 'send_sms',
-        login,
-        password,
-        number,
-        data_code: 'ucs2',
-        message: ucs2hex,
-      },
-    });
-    if (res.err === 0) return { attempt: 'POST-ucs2hex', endpoint: ep, ...res };
-  }
-
-  // Nic neprošlo → vrať poslední výsledek (pro diagnostiku)
-  return { attempt: 'none', endpoint: ENDPOINTS[0], err: 6, errMessage: ERR_MAP[6] };
-}
-
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
-  const { to, text } = req.body || {};
-  console.log('[send-sms] body:', { to, text });
-
-  if (!text || !String(text).trim()) return res.status(400).json({ ok: false, error: 'Missing text' });
-  if (!to || (Array.isArray(to) && to.length === 0)) return res.status(400).json({ ok: false, error: 'Missing recipient number(s)' });
-
-  const LOGIN = process.env.SMS_LOGIN;
-  const PASSWORD = process.env.SMS_PASSWORD;
-  console.log('[send-sms] env loaded:', { hasLogin: !!LOGIN, hasPass: !!PASSWORD });
-  if (!LOGIN || !PASSWORD) return res.status(500).json({ ok: false, error: 'Missing SMS_LOGIN or SMS_PASSWORD env' });
-
-  // Normalizace čísel: ponecháme číslice/+, zahodíme + a whitespace
-  const toList = Array.isArray(to) ? to : String(to).split(/[,\n;]+/);
-  const numbers = toList
-    .map(x => String(x).trim())
-    .filter(Boolean)
-    .map(x => x.replace(/[^\d+]/g, ''))
-    .map(x => x.replace(/^\+/, ''))
-    .filter(x => /^\d{8,15}$/.test(x));
-
-  if (numbers.length === 0) return res.status(400).json({ ok: false, error: 'No valid numbers after normalization' });
-
-  try {
-    const results = [];
-    for (const n of numbers) {
-      const r = await sendStrategies({ login: LOGIN, password: PASSWORD, number: n, text });
-      results.push({ number: n, ...r });
+  if (req.method !== 'POST') return res.status(405).json({error:'Method not allowed'});
+  const {to,text} = req.body || {};
+  const message = prepareText(text);
+  if (!message) return res.status(400).json({ok:false,error:'Chybí text SMS.'});
+  const length = smsLength(message);
+  if (!Number.isFinite(length)) return res.status(400).json({ok:false,error:'SMS obsahuje nepodporované znaky (například emoji). Odstraňte je před odesláním.'});
+  if (length > 459) return res.status(400).json({ok:false,error:`SMS je příliš dlouhá (${length}/459 znaků). Zkraťte text nebo znovu vytvořte odkaz.`});
+  const list = Array.isArray(to) ? to : String(to || '').split(/[,\n;]+/);
+  const numbers = [...new Set(list.map(n => String(n).replace(/[\s()-]/g,'')).filter(Boolean).map(n => n.replace(/^00/,'+')))];
+  if (!numbers.length || numbers.some(n=>!/^\+?\d{8,15}$/.test(n))) return res.status(400).json({ok:false,error:'Zkontrolujte telefonní číslo včetně mezinárodní předvolby.'});
+  const login = process.env.SMS_LOGIN, password = process.env.SMS_PASSWORD;
+  if (!login || !password) return res.status(500).json({ok:false,error:'Chybí přihlášení k SMS bráně.'});
+  const endpoint = 'https://api.smsbrana.cz/smsconnect/';
+  const results = [];
+  for (const number of numbers) {
+    try {
+      // Never retry an ambiguous send: the provider may already have accepted it.
+      const query = new URLSearchParams({action:'send_sms',login,password,number,message,data_code:'7bit'});
+      const response = await fetch(endpoint+'?'+query, {signal:AbortSignal.timeout(15000)});
+      const raw = await response.text();
+      const match = raw.match(/<err>\s*(-?\d+)\s*<\/err>/);
+      const err = match ? Number(match[1]) : null;
+      const sms_id = raw.match(/<sms_id>(\d+)<\/sms_id>/)?.[1] || null;
+      const accepted = response.ok && err === 0;
+      results.push({number,ok:accepted,err:response.ok?err:null,sms_id,attempt:'GET-7bit',endpoint,
+        errMessage:!response.ok || err === null ? 'Výsledek nelze ověřit. Před dalším pokusem zkontrolujte odeslané SMS v bráně.' : ERR_MAP[err] || 'Neznámá chyba brány ('+err+')'});
+      console.info('[send-sms] result', {http:response.status,err,sms_id});
+    } catch {
+      results.push({number,ok:false,err:null,attempt:'GET-7bit',endpoint,errMessage:'Spojení s bránou se přerušilo. Před opakováním zkontrolujte odeslané SMS v bráně.'});
     }
-    const ok = results.some(r => r.err === 0);
-    return res.status(200).json({ ok, results });
-  } catch (e) {
-    console.error('[send-sms] ERROR', e);
-    return res.status(500).json({ ok: false, error: e.message });
   }
+  return res.status(200).json({ok:results.some(r=>r.ok),results});
 }
