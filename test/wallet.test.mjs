@@ -10,12 +10,12 @@ import {createWalletSaveHandler} from '../api/wallet-save.js';
 import {createSessionCookie} from '../api/_wallet-auth.js';
 const config={issuerId:'123',classSuffix:'hillside18_stay_v2',key:{private_key:'synthetic-only'}};
 const response=()=>({headers:{},setHeader(k,v){this.headers[k]=v;},status(n){this.code=n;return this;},json(b){this.body=b;return this;},end(b){this.body=b;return this;}});
-test('all booking states, apartments and languages preserve Alfred and hide door until ready',()=>{
+test('all booking states, apartments and languages show apartment, support and full Alfred link; hide door until ready',()=>{
  const now=Date.now(),stay={passId:randomUUID(),releaseAt:now-1000,expiresAt:now+86400000};
  for(const lang of ['cs','en','de'])for(const apartment of ['1','2','3','4'])for(const checkinComplete of [false,true])for(const paymentComplete of [false,true]){
   const body={alfred:'DEMOHS',apartment,doorCode:'0258',checkinComplete,paymentComplete,accessConfirmed:true,lang};
   const {object,state}=buildWalletObject(stay,body,config,now);assert.equal(state,checkinComplete&&paymentComplete?'ready':'pending');
-  assert.equal(JSON.stringify(object).includes('0258'),state==='ready');assert.equal(object.textModulesData.find(x=>x.id==='alfred').body,'DEMOHS');assert.equal(object.textModulesData.find(x=>x.id==='apartment').body,apartment);
+  assert.equal(JSON.stringify(object).includes('0258'),state==='ready');assert.equal(object.header.defaultValue.value,apartment);assert.equal(object.textModulesData.find(x=>x.id==='alfred').body,'https://alfred.previo.app/login/DEMOHS');assert.equal(object.textModulesData.find(x=>x.id==='support').body,'+420 731 990 087');assert.ok(object.linksModuleData.uris.some(x=>x.id==='contact'&&x.uri.endsWith('/hillside-support.vcf')));assert.equal(object.textModulesData.find(x=>x.id==='apartment').body,apartment);
   for(const time of [now-2000,now+86400000])assert.ok(!JSON.stringify(buildWalletObject(stay,body,config,time).object).includes('0258'));
  }
 });
@@ -33,7 +33,7 @@ test('authenticated lifecycle, stable identity and dates, failure, expiry and gu
   assert.equal((await get(pending.body.guestToken+'a')).code,404);
   const done={action:'sync-existing',checkinComplete:true,paymentComplete:true,accessConfirmed:true,expiresAt:undefined,releaseAt:undefined};
   assert.equal((await call({...done,alfred:'MISSING'})).body.skipped,true);
-  const ready=await call(done);assert.equal(ready.body.passId,pending.body.passId);assert.equal(ready.body.state,'ready');assert.equal(objects.at(-1).header.defaultValue.value,'0258');assert.equal(objects.at(-1).validTimeInterval.end.date,body.expiresAt);
+  const ready=await call(done);assert.equal(ready.body.passId,pending.body.passId);assert.equal(ready.body.state,'ready');assert.equal(objects.at(-1).textModulesData.find(x=>x.id==='door').body,'0258');assert.equal(objects.at(-1).validTimeInterval.end.date,body.expiresAt);
   assert.equal((await call({...done,doorCode:'258'})).code,400);
   const downgraded=await call({...done,paymentComplete:false});assert.equal(downgraded.body.state,'pending');assert.ok(!JSON.stringify(objects.at(-1)).includes('0258'));
   fail=true;assert.equal((await call(done)).code,503);assert.equal((await get(pending.body.guestToken)).code,503);fail=false;
