@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import {prepareText,smsLength} from '../api/send-sms.js';
 import {JSDOM} from 'jsdom';
 import {randomUUID} from 'node:crypto';
 import {buildWalletObject} from '../lib/wallet-pass.js';
@@ -47,11 +48,11 @@ const html=fs.readFileSync(new URL('../public/index.html',import.meta.url),'utf8
 const wallet=fs.readFileSync(new URL('../public/wallet.js',import.meta.url),'utf8');
 function page(){const dom=new JSDOM(html,{runScripts:'outside-only',url:'https://hs18-generator.vercel.app'}),w=dom.window;w.alert=()=>{};w.confirm=()=>true;w.fetch=async()=>({ok:true,json:async()=>({ok:true,items:[]})});for(const s of w.document.querySelectorAll('script:not([src])'))w.eval(s.textContent);w.eval(wallet);const q=id=>w.document.getElementById(id);q('alf').value='DEMOHS';w.setApartment('2');q('door').value='0258';q('phone').value='+420123456789';return {dom,w,q};}
 test('generator waits for Wallet before sending and retains tokens in all language SMS',async t=>{
- for(const scenario of ['success','failure','changed-guest','cancel','missing','unauthorized'])await t.test(scenario,async()=>{
+ for(const scenario of ['success','failure','changed-guest','cancel','missing','unauthorized','short-failure','short-changed'])await t.test(scenario,async()=>{
   const {dom,w,q}=page(),calls=[];let release;
   q('checkinComplete').checked=true;q('paymentComplete').checked=true;w.updateReservationState();
   w.confirm=()=>scenario!=='cancel';
-  w.fetch=async(url,options)=>{if(url==='/api/wallet'){calls.push(url);return new Promise(r=>release=r);}if(url==='/api/send-sms'){calls.push(JSON.parse(options.body));return {ok:true,json:async()=>({results:[{ok:true,err:0}]})};}return {ok:true,json:async()=>({ok:true,items:[]})};};
+  w.fetch=async(url,options)=>{if(url==='/api/wallet'){calls.push(url);return new Promise(r=>release=r);}if(url==='/api/guest-link'){const sent=JSON.parse(options.body);calls.push(sent);if(scenario==='short-changed')q('alf').value='OTHERX';return {ok:scenario!=='short-failure',json:async()=>({urls:{cs:'https://hs18-generator.vercel.app/s/'+'A'.repeat(22),en:'https://hs18-generator.vercel.app/s/'+'A'.repeat(22)+'/en',de:'https://hs18-generator.vercel.app/s/'+'A'.repeat(22)+'/de'},error:'Short link unavailable'})};}if(url==='/api/send-sms'){calls.push(JSON.parse(options.body));return {ok:true,json:async()=>({results:[{ok:true,err:0}]})};}return {ok:true,json:async()=>({ok:true,items:[]})};};
   q('btnSendSms').click();await new Promise(r=>setTimeout(r,0));
   if(scenario==='cancel'){assert.equal(calls.length,0);dom.window.close();return;}
   assert.deepEqual(calls,['/api/wallet']);
@@ -60,7 +61,8 @@ test('generator waits for Wallet before sending and retains tokens in all langua
   release({ok:!['failure','unauthorized'].includes(scenario),status:scenario==='unauthorized'?401:200,json:async()=>scenario==='missing'?{skipped:true,reason:'no-card'}:{state:'ready',guestToken:token,error:'Google failure'}});
   await new Promise(r=>setTimeout(r,10));
   if(['failure','unauthorized','changed-guest'].includes(scenario)){assert.equal(calls.length,1);assert.equal(q('textsCard').style.display,'none');}
-  else{assert.equal(calls.length,2);for(const lang of ['cs','en','de']){const sms=q('sms_'+lang).value;assert.equal(sms.includes('#wallet='),scenario!=='missing');assert.ok(sms.includes('0258'));assert.ok(sms.length<459);}}
+  else if(['short-failure','short-changed'].includes(scenario)){assert.equal(calls.length,2);assert.equal(q('textsCard').style.display,'none');}
+  else{assert.equal(calls.length,3);for(const lang of ['cs','en','de']){const sms=q('sms_'+lang).value;assert.equal(calls[1].urls[lang].includes('wallet='),scenario!=='missing');assert.ok(sms.includes('/s/'+ 'A'.repeat(22)));assert.ok(!sms.includes('wallet='));assert.ok(sms.includes('0258'));assert.ok(smsLength(prepareText(sms))<=306);}}
   dom.window.close();
  });
 });

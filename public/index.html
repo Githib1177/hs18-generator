@@ -751,10 +751,21 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
       if(syncWallet){try{if(!window.hillsideWalletSync)throw new Error('Správa Wallet se nenačetla. Obnovte stránku.');await window.hillsideWalletSync();}catch(error){el('walletStatus').textContent=error.message;return false;}}
 
       // URL pro všechny 3 jazyky
-      const urlCS = buildUrl(base, 'cs', alf, apt, door, state);
-      const urlEN = buildUrl(base, 'en', alf, apt, door, state);
-      const urlDE = buildUrl(base, 'de', alf, apt, door, state);
+      let urlCS = buildUrl(base, 'cs', alf, apt, door, state);
+      let urlEN = buildUrl(base, 'en', alf, apt, door, state);
+      let urlDE = buildUrl(base, 'de', alf, apt, door, state);
 
+      for(const id of ['urlsCard','textsCard','doorInfoCard'])el(id).style.display='none';
+      const signature=()=>JSON.stringify(['guestName','guestIsFemale','alf','apt','door','state','baseUrl','lang'].map(id=>el(id).value));
+      const submitted=signature();
+      try{
+        const response=await fetch('/api/guest-link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({urls:{cs:urlCS,en:urlEN,de:urlDE}})});
+        const result=await response.json();
+        if(!response.ok)throw new Error(result.error||'Krátký odkaz se nepodařilo vytvořit.');
+        if(signature()!==submitted)throw new Error('Údaje pobytu se změnily. Vytvořte odkaz znovu.');
+        for(const language of ['cs','en','de']){const parsed=new URL(result.urls?.[language]);if(parsed.origin!=='https://hs18-generator.vercel.app'||!/^\/s\/[A-Za-z0-9_-]{22}(\/(en|de))?$/.test(parsed.pathname)||parsed.search||parsed.hash)throw new Error('Server nevrátil platný krátký odkaz.');}
+        urlCS=result.urls.cs;urlEN=result.urls.en;urlDE=result.urls.de;
+      }catch(error){el('walletStatus').textContent=error.message;return false;}
       const urls = { cs:urlCS, en:urlEN, de:urlDE };
 
       // výpis URL
