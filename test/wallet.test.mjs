@@ -15,7 +15,7 @@ test('all booking states, apartments and languages show apartment, support and f
  for(const lang of ['cs','en','de'])for(const apartment of ['1','2','3','4'])for(const checkinComplete of [false,true])for(const paymentComplete of [false,true]){
   const body={alfred:'DEMOHS',apartment,doorCode:'0258',checkinComplete,paymentComplete,accessConfirmed:true,lang};
   const {object,state}=buildWalletObject(stay,body,config,now);assert.equal(state,checkinComplete&&paymentComplete?'ready':'pending');
-  assert.equal(JSON.stringify(object).includes('0258'),state==='ready');assert.equal(object.header.defaultValue.value,apartment);assert.equal(object.textModulesData.find(x=>x.id==='alfred').body,'https://alfred.previo.app/login/DEMOHS');assert.equal(object.textModulesData.find(x=>x.id==='support').body,'+420 731 990 087');assert.ok(object.linksModuleData.uris.some(x=>x.id==='contact'&&x.uri.endsWith('/hillside-support.vcf')));assert.equal(object.textModulesData.find(x=>x.id==='apartment').body,apartment);
+  assert.equal(JSON.stringify(object).includes('0258'),state==='ready');assert.equal(object.header.defaultValue.value,state==='ready'?'0258':apartment);assert.equal(object.textModulesData.find(x=>x.id==='alfred').body,'https://alfred.previo.app/login/DEMOHS');assert.equal(object.textModulesData.find(x=>x.id==='support').body,'+420 731 990 087');assert.ok(object.linksModuleData.uris.some(x=>x.id==='contact'&&x.uri.endsWith('/hillside-support.vcf')));assert.equal(object.textModulesData.find(x=>x.id==='apartment').body,apartment);
   for(const time of [now-2000,now+86400000])assert.ok(!JSON.stringify(buildWalletObject(stay,body,config,time).object).includes('0258'));
  }
 });
