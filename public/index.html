@@ -337,6 +337,7 @@
       document.querySelectorAll('[data-apt]').forEach(button=>{
         button.classList.toggle('active', button.dataset.apt === apt);
       });
+      document.dispatchEvent(new Event('hillside:apartment-changed'));
     }
 
     function updateReservationState(){
@@ -393,6 +394,7 @@
       el('lang').value = item.lang || 'cs';
       el('baseUrl').value = portalBase(item.baseUrl);
       el('historyStatus').textContent = `Formulář byl vyplněn ze záznamu: ${item.guestName || item.phone}.`;
+      document.dispatchEvent(new Event('hillside:stay-loaded'));
     }
 
     function renderHistory(items){
@@ -493,7 +495,7 @@ function buildUrl(base, lang, alf, apt, door, state){
   // 6) Záložně i do hashe (pro případy, kdy WP query ořízne)
   u.hash = aptStr ? 'apt=' + encodeURIComponent(aptStr) : '';
 
-  return u.toString();
+  return window.hillsideWalletLink ? window.hillsideWalletLink(u.toString()) : u.toString();
 }
 
     function salutation(lang, fullName, isFemaleSel){
@@ -712,7 +714,8 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
   for (const lang of ['cs','en','de']) {
     const u = new URL(urls[lang]);
     for (const key of ['apartment','apartment_no','apt1','apt2','apt3','apt4']) u.searchParams.delete(key);
-    u.hash = '';
+    const walletToken = new URLSearchParams(u.hash.slice(1)).get('wallet');
+    u.hash = walletToken ? 'wallet=' + encodeURIComponent(walletToken) : '';
     const alf = u.searchParams.get('alf') || '';
     const match = alf.match(/^https:\/\/alfred\.previo\.app\/login\/([A-Za-z0-9_-]+)\/?$/);
     if (match) u.searchParams.set('alf', match[1]);
@@ -729,7 +732,7 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
   return { sms_cs, mail_cs, sms_en, mail_en, sms_de, mail_de };
 }
     // ==== AKCE ====
-    el('btnBuild').addEventListener('click', ()=>{
+    window.buildHillsideLinks=async({syncWallet=true}={})=>{
       const fullName = trim(el('guestName').value);
       const isFemaleSel = el('guestIsFemale').value;
       const alf = trim(el('alf').value);
@@ -743,8 +746,9 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
 
       if(!alf || !apt){
         alert('Vyplň alespoň: Kód/URL do Alfréda (alf) a APT (apt).');
-        return;
+        return false;
       }
+      if(syncWallet){try{if(!window.hillsideWalletSync)throw new Error('Správa Wallet se nenačetla. Obnovte stránku.');await window.hillsideWalletSync();}catch(error){el('walletStatus').textContent=error.message;return false;}}
 
       // URL pro všechny 3 jazyky
       const urlCS = buildUrl(base, 'cs', alf, apt, door, state);
@@ -797,7 +801,9 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
 
       // SMS: univerzální sms: schema
       el('sms').href = 'sms:?&body=' + encodeURIComponent(waText);
-    });
+      return true;
+    };
+    el('btnBuild').addEventListener('click',()=>window.buildHillsideLinks());
 
     // Kopírková tlačítka
     document.addEventListener('click', async (e)=>{
@@ -817,8 +823,13 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
     // Odeslání přes SMS bránu (stejný endpoint jako Link Builder)
     el('btnSendSms').addEventListener('click', async ()=>{
       const btn = el('btnSendSms');
+      if(btn.disabled)return;
       const phones = normalizePhones(el('phone').value);
       if(!phones.length){ alert('Zadej alespoň jedno platné telefonní číslo.'); return; }
+      const submittedPhone=el('phone').value;
+      btn.disabled=true;
+      if(!await window.buildHillsideLinks()){btn.disabled=false;return;}
+      if(el('phone').value!==submittedPhone){el('smsStatus').textContent='Telefon se změnil. Zkontrolujte příjemce a odešlete znovu.';btn.disabled=false;return;}
 
       // SMS podle primárního jazyka
       const lang = el('lang').value;
@@ -883,5 +894,6 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
       }
     });
   </script>
+  <script src="/wallet.js"></script>
 </body>
 </html>
