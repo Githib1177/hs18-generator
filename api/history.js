@@ -67,7 +67,7 @@ function normalizeEntry(body) {
     guestName: clean(body.guestName, 120),
     guestIsFemale: ['auto', 'female', 'male'].includes(body.guestIsFemale) ? body.guestIsFemale : 'auto',
     alf: clean(body.alf, 500), apt: clean(body.apt, 50), door: clean(body.door, 50),
-    state: ['none', 'unpaid', 'done'].includes(body.state) ? body.state : 'none',
+    state: ['none', 'paid', 'unpaid', 'done'].includes(body.state) ? body.state : 'none',
     phone: clean(body.phone, 300),
     lang: ['cs', 'en', 'de'].includes(body.lang) ? body.lang : 'cs',
     baseUrl: clean(body.baseUrl, 500),
