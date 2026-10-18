@@ -32,6 +32,7 @@ export function createWalletLinkHandler({store=redis,getConfig=walletConfig,getO
  const provision=createCard||createWalletHandler({store,getConfig});
  return async(req,res)=>{
   res.setHeader('Cache-Control','no-store');res.setHeader('Referrer-Policy','no-referrer');
+  if(req.method==='POST'&&process.env.VERCEL_ENV&&process.env.VERCEL_ENV!=='production')return res.status(403).json({ok:false,error:'Testovací verze karty ani odkazy nemění.'});
   if(!isAuthorized(req))return res.status(401).json({ok:false,error:'Přihlaste se ke správě Wallet v Messengeru.'});
   if(!['GET','POST'].includes(req.method))return res.status(405).json({ok:false,error:'Nepovolená metoda.'});
   try{
