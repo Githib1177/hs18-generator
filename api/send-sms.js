@@ -1,5 +1,5 @@
 import registry from '../lib/registry.cjs';
-const {authorized,contextOf,contextFromText,checkContext,claim,finish} = registry;
+const {authorized,contextOf,contextFromMessage,checkContext,claim,finish} = registry;
 // SMS Connect accepts at most three 7-bit SMS segments (459 septets).
 export function prepareText(value) {
   return String(value || '').normalize('NFD').replace(/\p{Diacritic}/gu, '')
@@ -40,12 +40,12 @@ export default async function handler(req, res) {
   if(req.body?.context){
     if(!authorized(req))return res.status(401).json({ok:false,error:'Obnovte generátor: chybí ověření historie.'});
     try{
-      context=contextOf(req.body);const actual=contextFromText(text);
+      context=contextOf(req.body);const actual=await contextFromMessage(text);
       if(!actual||actual.stay!==context.stay||actual.state!==context.state||actual.apt!==context.apt)throw new Error('Text neodpovídá aktuálním údajům. Vytvořte odkaz znovu.');
     }catch(error){return res.status(400).json({ok:false,error:error.message});}
   }else{
     // Also cover old browser tabs whose request has only {to,text}.
-    try{context=contextFromText(text);}catch(error){return res.status(400).json({ok:false,error:error.message});}
+    try{context=await contextFromMessage(text);}catch(error){return res.status(400).json({ok:false,error:error.message});}
   }
   if(context){
     try{

@@ -50,16 +50,24 @@ test('history preserves reservation state and guest content across save/load/reo
   }
   const nodes = new Map();
   const get = id => { if (!nodes.has(id)) nodes.set(id, element()); return nodes.get(id); };
+  const targets = new Map();
   const context = vm.createContext({
-    URL, Intl, Date,
-    document: { getElementById: get, createElement: element, querySelectorAll: () => [], addEventListener() {} },
+    URL, URLSearchParams, Intl, Date,
+    Event:class{}, document: { dispatchEvent(){}, getElementById: get, createElement: element, querySelectorAll: () => [], addEventListener() {} },
     alert(message) { assert.fail(message); },
     fetch: async (url, options) => {
+      if(url==='/api/registry')return {ok:true,json:async()=>({ok:true,duplicate:false,reason:'test'})};
+      if(url==='/api/guest-link'){
+        const input=JSON.parse(options.body).urls;const urls={};
+        for(const lang of ['cs','en','de']){const id=get('state').value.padEnd(22,'x');urls[lang]='https://hs18-generator.vercel.app/s/'+id+(lang==='cs'?'':'/'+lang);targets.set(urls[lang],input[lang]);}
+        return {ok:true,json:async()=>({urls})};
+      }
       assert.equal(url, '/api/history', 'Never send a real SMS or request the live portal');
       const data = await request(options.method, options.body && JSON.parse(options.body));
       return { ok: true, json: async () => data };
     },
   });
+  context.window=context;context.hillsideWalletSync=async()=>{};
   // Execute the actual client script, including its event handlers and templates.
   vm.runInContext(script, context);
   await vm.runInContext('loadSharedHistory()', context);
@@ -79,7 +87,7 @@ test('history preserves reservation state and guest content across save/load/reo
       get('guestIsFemale').value = 'auto';
       context.inputState = state;
       vm.runInContext('setReservationState(inputState)', context);
-      get('btnBuild').listeners.click();
+      await get('btnBuild').listeners.click();
       const before = Object.fromEntries(['cs', 'en', 'de'].flatMap(lang =>
         ['sms', 'mail'].map(kind => [`${kind}_${lang}`, get(`${kind}_${lang}`).value])));
       await vm.runInContext('saveSuccessfulSend()', context);
@@ -93,12 +101,12 @@ test('history preserves reservation state and guest content across save/load/reo
       assert.equal(get('state').value, state);
       assert.equal(get('checkinComplete').checked, checkedIn);
       assert.equal(get('paymentComplete').checked, paid);
-      get('btnBuild').listeners.click();
+      await get('btnBuild').listeners.click();
       for (const [key, expected] of Object.entries(before)) assert.equal(get(key).value, expected, key);
       assert.ok(get('sms_cs').value.includes(message));
       for (const lang of ['cs', 'en', 'de']) {
         const sms = get(`sms_${lang}`).value;
-        const url = new URL(sms.split('\n')[1]);
+        const url = new URL(targets.get(sms.split('\n')[1]));
         for (const flag of ['paid', 'unpaid', 'done']) {
           assert.equal(url.searchParams.get(flag), flag === state ? '1' : null);
         }

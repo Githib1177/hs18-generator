@@ -44,4 +44,17 @@ test('registry guards actual SMS handler without a real network',async t=>{
  await t.test('stale text and malformed context never send',async()=>{let b=body('STALE001');b.context.alf='OTHER001';let before=providerCalls;assert.equal((await call(handler,b)).code,400);assert.equal(before,providerCalls);assert.equal((await call(handler,body('NOAUTH01'),false)).code,401)});
  await t.test('older live tabs with only to/text still receive duplicate protection',async()=>{let b=body();delete b.context;let before=providerCalls;assert.equal((await call(handler,b,false)).code,409);assert.equal(providerCalls,before)});
  await t.test('legacy non-portal SMS contract preserved',async()=>{let r=await call(handler,{to:'+420777000001',text:'Unit test without portal'},false);assert.equal(r.code,200);assert.equal(r.data.results[0].ok,true)});
+ await t.test('short links resolve stored state and retain duplicate and mismatch guards',async()=>{
+  for(const state of ['none','paid','unpaid','done']){
+   const b=body('SHORT'+state.toUpperCase(),state),id=state.padEnd(22,'x');
+   strings.set('hs18:guest-link:'+id,JSON.stringify({cs:b.text.split('Info ')[1]}));
+   b.text='Hillside 18: https://hs18-generator.vercel.app/s/'+id;
+   let before=providerCalls;const wrong={...b,context:{...b.context,state:state==='done'?'unpaid':'done'}};
+   assert.equal((await call(handler,wrong)).code,400);assert.equal(providerCalls,before);
+   assert.equal((await call(handler,b)).code,200);assert.equal(providerCalls,before+1);
+   delete b.context;assert.equal((await call(handler,b,false)).code,409);assert.equal(providerCalls,before+1);
+  }
+  let before=providerCalls;const missing=body('SHORTMISS');missing.text='https://hs18-generator.vercel.app/s/'+'z'.repeat(22);
+  assert.equal((await call(handler,missing)).code,400);assert.equal(providerCalls,before);
+ });
 });
