@@ -52,7 +52,7 @@ export function createWalletLinkHandler({store=redis,getConfig=walletConfig,getO
    if(startsAt>=expiresAt||expiresAt<=Date.now()||expiresAt>Date.now()+366*86400000)return res.status(400).json({ok:false,error:'Neplatná platnost pobytu.'});
    let created=false;
    if(!object){
-    const result=capture();await provision({...req,method:'POST',body:{action:'create',alfred:context.alf,apartment:context.apt,doorCode:context.pin,checkinComplete:true,paymentComplete:true,accessConfirmed:true,operatorConfirmed:true,lang:'de',releaseAt:new Date(Date.now()-1000).toISOString(),startsAt:new Date(startsAt).toISOString(),expiresAt:new Date(expiresAt).toISOString()}},result);
+    const result=capture();await provision({method:'POST',headers:req.headers,body:{action:'create',alfred:context.alf,apartment:context.apt,doorCode:context.pin,checkinComplete:true,paymentComplete:true,accessConfirmed:true,operatorConfirmed:true,lang:'de',releaseAt:new Date(Date.now()-1000).toISOString(),startsAt:new Date(startsAt).toISOString(),expiresAt:new Date(expiresAt).toISOString()}},result);
     if(result.code!==200||!result.body?.passId)return res.status(result.code>=400?result.code:503).json({ok:false,error:result.body?.error||'Google nepotvrdil vytvoření karty.'});
     recordRaw=await store(['GET',stayKey(hash)]);record=recordRaw?JSON.parse(recordRaw):null;
     if(!record||record.state!=='ready'||record.busyUntil>Date.now())throw Error('Karta není připravená.');
