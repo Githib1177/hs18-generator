@@ -25,7 +25,9 @@ export function createWalletHandler({store=redis,getConfig=walletConfig,putObjec
   const expiresAt=existing?previous.expiresAt:Date.parse(body.expiresAt),releaseAt=existing?previous.releaseAt:Date.parse(body.releaseAt);
   if(!Number.isFinite(expiresAt)||!Number.isFinite(releaseAt)||releaseAt>=expiresAt||expiresAt<=now||expiresAt>now+366*86400000)return res.status(400).json({error:'Zadejte platný začátek přístupu a konec pobytu v části Wallet.'});
   if(body.checkinComplete&&body.paymentComplete&&releaseAt>now)return res.status(409).json({error:'Čas přístupu ještě nenastal. Vyčkejte, nebo opravte čas v části Wallet.'});
-  const stay={passId:previous?.passId||randomUUID(),expiresAt,releaseAt};
+  const startsAt=existing?previous.startsAt:(body.startsAt?Date.parse(body.startsAt):previous?.startsAt);
+  if(startsAt!==undefined&&(!Number.isFinite(startsAt)||startsAt>=expiresAt))return res.status(400).json({error:'Neplatný začátek pobytu.'});
+  const stay={passId:previous?.passId||randomUUID(),expiresAt,releaseAt,...(startsAt!==undefined?{startsAt}:{})};
   const {object,state}=buildWalletObject(stay,body,config,now);
   const record={...stay,state:null,busyUntil:now+120000};
   const write=async value=>{if(await store(['EVAL',commitScript,3,lockKey(hash),stayKey(hash),passKey(stay.passId),claim,JSON.stringify(value)])!==1)throw new Error('Kartu současně změnil jiný požadavek. Zkuste to znovu.');};
@@ -35,3 +37,4 @@ export function createWalletHandler({store=redis,getConfig=walletConfig,putObjec
  finally{if(hash&&claim)try{await store(['EVAL',"if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('DEL',KEYS[1]) end return 0",1,lockKey(hash),claim]);}catch{}}
 };}
 export default createWalletHandler();
+
