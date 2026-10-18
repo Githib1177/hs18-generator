@@ -1,4 +1,5 @@
-import {authorized,contextOf,checkContext} from '../lib/registry.mjs';
+import registry from '../lib/registry.cjs';
+const {authorized,contextOf,checkContext} = registry;
 export default async function handler(req,res){
   res.setHeader('Cache-Control','no-store');
   if(!authorized(req))return res.status(401).json({ok:false,error:'Neplatný přístupový klíč historie.'});
