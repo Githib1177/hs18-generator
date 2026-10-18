@@ -2,7 +2,8 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import handler from '../api/send-sms.js';
 import registryHandler from '../api/registry.js';
-import {HISTORY,EVENTS,contextOf,normalizeAlf,contextFromText} from '../lib/registry.mjs';
+import registry from '../lib/registry.cjs';
+const {HISTORY,EVENTS,contextOf,normalizeAlf,contextFromText}=registry;
 
 test('registry guards actual SMS handler without a real network',async t=>{
  const original={...process.env};t.after(()=>{process.env=original});
