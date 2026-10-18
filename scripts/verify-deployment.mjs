@@ -6,6 +6,7 @@ import {pathToFileURL} from 'node:url';
 const repo='Githib1177/hs18-generator';
 const protectedPath=p=>/^(api|lib|public|scripts)\//.test(p)||['vercel.json','package.json','package-lock.json','.vercelignore'].includes(p);
 export const blobHash=bytes=>createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+export const canonical=value=>JSON.stringify(value&&typeof value==='object'?Array.isArray(value)?value.map(v=>JSON.parse(canonical(v))):Object.fromEntries(Object.keys(value).sort().map(k=>[k,JSON.parse(canonical(value[k]))])):value);
 export async function verifyDeployment({env=process.env,fetcher=fetch,root=process.cwd()}={}){
  if(env.VERCEL_ENV==='preview')return {preview:true};
  if(env.VERCEL_ENV!=='production')throw Error('Production verification requires an explicit Vercel production environment.');
@@ -19,7 +20,13 @@ export async function verifyDeployment({env=process.env,fetcher=fetch,root=proce
  if(!expected.has('scripts/verify-deployment.mjs')||!expected.has('api/guest-link.js')||!expected.has('public/index.html'))throw Error('Required production safeguards missing.');
  for(const [path,entry] of expected){
   if(!['100644','100755'].includes(entry.mode))throw Error('Unsupported source entry: '+path);
-  const bytes=await readFile(resolve(root,path));if(blobHash(bytes)!==entry.sha)throw Error('Source differs from current main: '+path);
+  const bytes=await readFile(resolve(root,path));
+  if(blobHash(bytes)!==entry.sha){
+   if(path!=='vercel.json')throw Error('Source differs from current main: '+path);
+   const original=await get('/git/blobs/'+entry.sha);
+   if(original.encoding!=='base64')throw Error('Cannot verify deployment configuration.');
+   if(canonical(JSON.parse(bytes.toString('utf8')))!==canonical(JSON.parse(Buffer.from(original.content,'base64').toString('utf8'))))throw Error('Deployment configuration differs from current main.');
+  }
  }
  const walk=async(dir)=>{let entries;try{entries=await readdir(resolve(root,dir),{withFileTypes:true});}catch(e){if(e.code==='ENOENT')return;throw e;}
   for(const entry of entries){const p=dir+'/'+entry.name;if(entry.isSymbolicLink())throw Error('Unexpected source symlink: '+p);if(entry.isDirectory())await walk(p);else if(!expected.has(p))throw Error('Untracked source blocked: '+p);}};
