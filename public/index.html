@@ -149,6 +149,12 @@
       </div>
     </div>
 
+    <div class="card" id="registryCard">
+      <strong>Kontrola společného registru</strong>
+      <div id="registryStatus" class="muted">Automatické SMS jsou vypnuté. Ruční odeslání ověřuje stejný pobyt a stav na serveru.</div>
+      <button id="btnCheckRegistry" class="btn btn-ghost" style="margin-top:10px">Pouze zkontrolovat – nic neposílat</button>
+      <div class="muted">Alfréd zajišťuje e-mailovou žádost o check-in. Generátor předává portál a informace k pobytu. SMS D−2 je zatím návrh bez automatického odesílání.</div>
+    </div>
     <!-- SDÍLENÁ HISTORIE -->
     <div class="card" id="historyCard">
       <div style="display:flex;gap:10px;align-items:end;justify-content:space-between;flex-wrap:wrap">
@@ -363,6 +369,26 @@
       updateReservationState();
     }
 
+    // Immutable context for the generated text; history restores inputs only.
+    let builtContext = null;
+    function currentContext(){return {alf:trim(el('alf').value),apt:trim(el('apt').value),state:el('state').value};}
+    function invalidateBuiltContext(){
+      builtContext=null;
+      el('registryStatus').textContent='Údaje se změnily. Před ručním odesláním vytvořte odkaz znovu.';
+    }
+    async function checkRegistry(){
+      const response=await fetch('/api/registry',{method:'POST',headers:{'Content-Type':'application/json','X-History-Key':historyAccessKey()},body:JSON.stringify({context:currentContext()})});
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok||!data.ok)throw new Error(data.error||'Registr nelze ověřit.');
+      el('registryStatus').textContent=(data.duplicate?'⚠️ ':'✓ ')+data.reason;
+      return data;
+    }
+    el('btnCheckRegistry').addEventListener('click',async()=>{
+      try{await checkRegistry();}catch(error){el('registryStatus').textContent='⚠️ '+error.message;}
+    });
+    for(const id of ['guestName','guestIsFemale','alf','door','checkinComplete','paymentComplete','phone','lang','baseUrl']){
+      el(id).addEventListener('change',invalidateBuiltContext);
+    }
     // ==== SDÍLENÁ HISTORIE ====
     const HISTORY_ACCESS_KEY = 'HS18-gRxXdW-MC5-C';
 
@@ -383,6 +409,7 @@
     }
 
     function fillFromHistory(item){
+      invalidateBuiltContext();
       el('guestName').value = item.guestName || '';
       el('guestIsFemale').value = item.guestIsFemale || 'auto';
       el('alf').value = item.alf || '';
@@ -445,7 +472,7 @@
 
     el('btnLoadHistory').addEventListener('click', loadSharedHistory);
     document.querySelectorAll('[data-apt]').forEach(button=>{
-      button.addEventListener('click', ()=>setApartment(button.dataset.apt));
+      button.addEventListener('click', ()=>{setApartment(button.dataset.apt);invalidateBuiltContext();});
     });
     el('checkinComplete').addEventListener('change', updateReservationState);
     el('paymentComplete').addEventListener('change', updateReservationState);
@@ -797,6 +824,8 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
 
       // SMS: univerzální sms: schema
       el('sms').href = 'sms:?&body=' + encodeURIComponent(waText);
+      builtContext=JSON.stringify(currentContext());
+      checkRegistry().catch(error=>{el('registryStatus').textContent='⚠️ '+error.message;});
     });
 
     // Kopírková tlačítka
@@ -817,6 +846,9 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
     // Odeslání přes SMS bránu (stejný endpoint jako Link Builder)
     el('btnSendSms').addEventListener('click', async ()=>{
       const btn = el('btnSendSms');
+      if(!builtContext||builtContext!==JSON.stringify(currentContext())){
+        alert('Údaje se změnily nebo pocházejí z historie. Nejdříve vytvořte odkaz znovu.');return;
+      }
       const phones = normalizePhones(el('phone').value);
       if(!phones.length){ alert('Zadej alespoň jedno platné telefonní číslo.'); return; }
 
@@ -840,8 +872,8 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
       try{
         const res = await fetch(SMS_API_URL, {
           method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ to: phones, text })
+          headers:{'Content-Type':'application/json','X-History-Key':historyAccessKey()},
+          body: JSON.stringify({ to: phones, text, context:JSON.parse(builtContext) })
         });
 
         const data = await res.json().catch(()=> ({}));
@@ -874,6 +906,7 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
 
           status.textContent = anyOk ? '✅ SMS úspěšně odeslána' : '❌ SMS se nepodařilo odeslat (viz tabulka níže)';
           if(anyOk) await saveSuccessfulSend();
+          if(data.registryWarning) status.textContent+=' ⚠️ '+data.registryWarning;
         }
       }catch(err){
         status.textContent = '❌ Chyba spojení k SMS bráně';
@@ -885,3 +918,4 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
   </script>
 </body>
 </html>
+
