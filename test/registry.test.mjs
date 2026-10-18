@@ -34,6 +34,15 @@ test('registry guards actual SMS handler without a real network',async t=>{
   await call(registryHandler,body());assert.equal(hashes.get(EVENTS).size,1);
  });
  await t.test('read-only check never reserves or sends',async()=>{let r=await call(registryHandler,body('CHECKONLY'));assert.equal(r.code,200);assert.equal(r.data.duplicate,false);assert.equal(r.data.automaticSendEnabled,false);assert.equal(providerCalls,0);assert.ok(!strings.has(contextOf(body('CHECKONLY')).key))});
+ await t.test('manual repeat requires explicit bound confirmation and is single-use',async()=>{
+  const b=body();let before=providerCalls;
+  let first=await call(handler,b);assert.equal(first.code,409);assert.equal(first.data.allowManualResend,true);assert.equal(before,providerCalls);const token=first.data.manualResendToken;assert.ok(token);
+  const changed=await call(handler,{...b,to:['+420777000099'],mode:'manual',manualResendToken:token});assert.equal(changed.code,409);assert.equal(before,providerCalls);
+  assert.equal((await call(handler,{...b,mode:'automatic',manualResendToken:token})).code,401);assert.equal(before,providerCalls);
+  let approved=await call(handler,{...b,mode:'manual',manualResendToken:token});assert.equal(approved.code,200);assert.equal(providerCalls-before,1);
+  before=providerCalls;assert.equal((await call(handler,{...b,mode:'manual',manualResendToken:token})).code,409);assert.equal(before,providerCalls);
+  assert.equal([...hashes.get(EVENTS).values()].map(x=>JSON.parse(x)).filter(x=>x.manualResend).length,1);
+ });
  await t.test('later done is a distinct event; two concurrent requests send once',async()=>{
   let before=providerCalls;let rs=await Promise.all([call(handler,body('TESTCODE','done')),call(handler,body('TESTCODE','done'))]);assert.deepEqual(rs.map(r=>r.code).sort(),[200,409]);assert.equal(providerCalls-before,1);
  });
@@ -58,3 +67,4 @@ test('registry guards actual SMS handler without a real network',async t=>{
   assert.equal((await call(handler,missing)).code,400);assert.equal(providerCalls,before);
  });
 });
+

@@ -1,4 +1,5 @@
 import registry from '../lib/registry.cjs';
+import manualRepeat from '../lib/manual-resend.cjs';
 const {authorized,contextOf,contextFromMessage,checkContext,claim,finish} = registry;
 // SMS Connect accepts at most three 7-bit SMS segments (459 septets).
 export function prepareText(value) {
@@ -49,7 +50,16 @@ export default async function handler(req, res) {
   }
   if(context){
     try{
-      if((await checkContext(context)).duplicate)return res.status(409).json({ok:false,error:'Stejný pobyt a stav již byly odeslány nebo čekají na kontrolu. SMS zablokována.'});
+      const duplicate=(await checkContext(context)).duplicate;
+      const token=req.body?.manualResendToken;
+      if(token&&(!req.body?.context||req.body?.mode!=='manual'||!authorized(req)))return res.status(401).json({ok:false,error:'Ruční opakování není ověřeno.'});
+      if(duplicate){
+        const safety=await manualRepeat.assess(context);
+        if(!safety.allowed)return res.status(409).json({ok:false,error:safety.reason,allowManualResend:false});
+        if(!token)return res.status(409).json({ok:false,error:safety.reason,allowManualResend:!!req.body?.context&&authorized(req),manualResendToken:req.body?.context&&authorized(req)?manualRepeat.issue(context,message,numbers):undefined});
+        if(!manualRepeat.verify(token,context,message,numbers))return res.status(409).json({ok:false,error:'Potvrzení vypršelo nebo se změnil obsah. Zkontrolujte zprávu znovu.'});
+        context={...context,repeatOf:context.key,key:manualRepeat.key(token),manualResend:true};
+      }else if(token)return res.status(409).json({ok:false,error:'Stav registru se změnil. Zkontrolujte zprávu znovu.'});
       event=await claim(context);
       if(!event)return res.status(409).json({ok:false,error:'Tato událost je již zpracovávána. SMS zablokována.'});
     }catch{return res.status(503).json({ok:false,error:'Registr není dostupný. SMS nebyla odeslána.'});}
@@ -77,4 +87,5 @@ export default async function handler(req, res) {
   if(context&&event){try{await finish(context,event,results);}catch{registryWarning='Výsledek se nepodařilo doplnit do registru. Pokus zůstává uzamčen; před opakováním zkontrolujte bránu.';}}
   return res.status(200).json({ok:results.some(r=>r.ok),results,registryWarning});
 }
+
 

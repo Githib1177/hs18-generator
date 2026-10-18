@@ -151,7 +151,7 @@
 
     <div class="card" id="registryCard">
       <strong>Kontrola společného registru</strong>
-      <div id="registryStatus" class="muted">Automatické SMS jsou vypnuté. Ruční odeslání ověřuje stejný pobyt a stav na serveru.</div>
+      <div id="registryStatus" class="muted">Automatické SMS jsou vypnuté. Stejnou ruční zprávu lze vědomě zopakovat po upozornění a potvrzení; nejasný výsledek nejprve ověřte v SMS bráně.</div>
       <button id="btnCheckRegistry" class="btn btn-ghost" style="margin-top:10px">Pouze zkontrolovat – nic neposílat</button>
       <div class="muted">Alfréd zajišťuje e-mailovou žádost o check-in. Generátor předává portál a informace k pobytu. SMS D−2 je zatím návrh bez automatického odesílání.</div>
     </div>
@@ -880,6 +880,8 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
                  : lang==='en' ? el('sms_en').value
                  : el('sms_de').value;
 
+      const sendContext = JSON.parse(builtContext);
+      const guestLabel = trim(el('guestName').value);
       const status = el('smsStatus');
       const tableWrap = el('smsTableWrap');
       const tbody = el('smsTable').querySelector('tbody');
@@ -892,13 +894,23 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
       status.textContent = 'Odesílám…';
 
       try{
-        const res = await fetch(SMS_API_URL, {
+        let res = await fetch(SMS_API_URL, {
           method:'POST',
           headers:{'Content-Type':'application/json','X-History-Key':historyAccessKey()},
-          body: JSON.stringify({ to: phones, text, context:JSON.parse(builtContext) })
+          body: JSON.stringify({ to: phones, text, context:sendContext, mode:'manual' })
         });
 
-        const data = await res.json().catch(()=> ({}));
+        let data = await res.json().catch(()=> ({}));
+        if(res.status===409 && data.allowManualResend && data.manualResendToken){
+          const approved=confirm('Stejná zpráva pro tento pobyt a stav už byla odeslána.\n\nHost: '+guestLabel+'\nApartmán: '+sendContext.apt+'\nPříjemci: '+phones.join(', ')+'\n\n'+text+'\n\nOpravdu chcete tuto SMS vědomě odeslat znovu?');
+          if(!approved){status.textContent='Opakované odeslání bylo zrušeno. Žádná další SMS nebyla odeslána.';return;}
+          res=await fetch(SMS_API_URL,{
+            method:'POST',headers:{'Content-Type':'application/json','X-History-Key':historyAccessKey()},
+            body:JSON.stringify({to:phones,text,context:sendContext,mode:'manual',manualResendToken:data.manualResendToken})
+          });
+          data=await res.json().catch(()=>({}));
+        }
+
 
         if (!res.ok) {
           status.textContent = '❌ Chyba při odesílání SMS: ' + (data.error || res.status);
@@ -941,4 +953,5 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
   <script src="/wallet.js"></script>
 </body>
 </html>
+
 
