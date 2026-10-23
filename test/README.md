@@ -22,3 +22,28 @@ The separate guest portal source was also checked at commit
 an isolated runtime check of all 12 state/language combinations. In `paid`,
 payment is complete, check-in remains pending, and the door code stays hidden.
 That separate repository and its deployment were not changed.
+
+
+# SMS registry regression tests
+
+```sh
+node --test test/registry.test.mjs test/manual-resend-client.test.mjs
+```
+
+The actual SMS and registry handlers run against a simulated provider and
+in-memory Redis. No credentials or live services are required. Coverage includes
+accepted messages, all-recipient rejection (credit/number errors), corrected
+concurrent retries, partial acceptance, timeouts, malformed/HTTP responses,
+unknown provider codes, legacy rejected locks, audit failures and claim races.
+Manual confirmation stays single-use even when a repeat is rejected.
+
+Only explicit rejection codes 1–13 for every recipient allow a normal retry.
+Code -1 (message already exists), missing/new codes and incomplete outcomes stay
+protected. Rejected audit entries are retained. Old rejected claims are released
+only when their stored recipient results prove complete rejection, using an
+atomic comparison of the claim and audit record. Any earlier success or
+unresolved attempt still blocks normal sending. Both module entry points share
+this state machine.
+
+The full suite is `node --test test/*.test.mjs`; portal/Wallet DOM tests also
+require `jsdom`. All transports in these tests are simulated.
