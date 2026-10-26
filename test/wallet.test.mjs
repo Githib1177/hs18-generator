@@ -60,7 +60,7 @@ test('generator waits for Wallet before sending and retains tokens in all langua
   const token=guestToken(randomUUID(),config);
   release({ok:!['failure','unauthorized'].includes(scenario),status:scenario==='unauthorized'?401:200,json:async()=>scenario==='missing'?{skipped:true,reason:'no-card'}:{state:'ready',guestToken:token,error:'Google failure'}});
   await new Promise(r=>setTimeout(r,10));
-  if(['failure','unauthorized','changed-guest'].includes(scenario)){assert.equal(calls.length,1);assert.equal(q('textsCard').style.display,'none');}
+  if(['failure','unauthorized','changed-guest','missing'].includes(scenario)){assert.equal(calls.length,1);assert.equal(q('textsCard').style.display,'none');}
   else if(['short-failure','short-changed'].includes(scenario)){assert.equal(calls.length,2);assert.equal(q('textsCard').style.display,'none');}
   else{assert.equal(calls.length,3);for(const lang of ['cs','en','de']){const sms=q('sms_'+lang).value;assert.equal(calls[1].urls[lang].includes('wallet='),scenario!=='missing');assert.ok(sms.includes('/s/'+ 'A'.repeat(22)));assert.ok(!sms.includes('wallet='));assert.ok(sms.includes('0258'));assert.ok(smsLength(prepareText(sms))<=306);}}
   dom.window.close();

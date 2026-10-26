@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "functions": { "api/wallet.js": { "maxDuration": 90 } },
+  "functions": { "api/wallet.js": { "maxDuration": 90 }, "api/manager-dispatch.js": { "maxDuration": 90 } },
   "rewrites": [
     { "source": "/s/:id/:lang", "destination": "/api/guest-link?id=:id&lang=:lang" },
     { "source": "/s/:id", "destination": "/api/guest-link?id=:id" }

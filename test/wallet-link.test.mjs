@@ -1,5 +1,7 @@
+// Fixed test clock: this historical DST fixture must not expire as real time advances.
 import test from 'node:test';import assert from 'node:assert/strict';import {createHash,randomUUID,generateKeyPairSync} from 'node:crypto';
 import {createWalletLinkHandler,pragueTime} from '../api/wallet-link.js';import {createWalletHandler} from '../api/wallet.js';import {createSessionCookie} from '../api/_wallet-auth.js';import {guestToken} from '../lib/wallet-guest-token.js';import {getWalletObject} from '../lib/google-wallet.js';
+test.beforeEach(t=>t.mock.timers.enable({apis:['Date'],now:Date.parse('2026-10-24T12:00:00Z')}));
 const config={issuerId:'123',classSuffix:'test',key:{private_key:'synthetic-only'}},id='A'.repeat(22),key='hs18:guest-link:'+id,hash=createHash('sha256').update('DEMOHS').digest('hex');
 const response=()=>({code:200,headers:{},setHeader(k,v){this.headers[k]=v;},status(n){this.code=n;return this;},json(body){this.body=body;return this;}});
 function setup(){const urls=Object.fromEntries(['cs','en','de'].map(lang=>[lang,'https://hillside18-guest-portal.vercel.app/?alf=DEMOHS&apt=3&done=1&door=0123&lang='+lang]));const values=new Map([[key,JSON.stringify(urls)]]),objects=new Map(),commands=[];let puts=0,conflict=false;
