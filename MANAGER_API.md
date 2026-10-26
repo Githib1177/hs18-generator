@@ -25,14 +25,14 @@ The API checks the shared registry, creates/updates the same Wallet identity,
 requires Google's successful response, embeds its signed token in all language
 targets and creates a NEW immutable short link. Missing dates or Wallet failure
 stop preparation. Existing shared short links are never edited.
-Save returned `id`, `urls` and `walletState` with the original LINK_CREATE evidence.
+Supply a stable UUID `preparationId` from the original LINK_CREATE operation before the first call, with `sourceCheckedAt` from a real verification no older than120s. Persist it locally before network. The server checkpoints the intent before Wallet, then the Wallet revision before the immutable short link. Save returned `id`, `urls` and `walletState` with the original LINK_CREATE evidence.
 
 ## Send (SMS_SEND)
 
 After the original SMS_SEND reserve and fresh recipient/content checks, send
 `action: "send"`, saved `id`, `operatorConfirmed: true`, `to` (one verified
 international phone), `text` (approved state template, ASCII, exact prepared URL
-for the selected language). Preparation is usable for 15 minutes. There is no
+for the selected language). Include the original local `operationId`, `bindingHash`, and fresh `sourceCheckedAt`. Preparation older than15min requires a new actual source verification no older than120s; this does not create a new preparation. There is no
 browser `confirm()` in this path. The API checks the Wallet revision and validity
 under its lock, then invokes the original SMS handler and shared atomic claim.
 It persists the response before saving the existing shared history.
@@ -48,8 +48,14 @@ can finish the history write from an already persisted successful receipt; it
 never calls the SMS provider. Sending the same prepared ID again returns the
 original receipt or blocks an uncertain attempt. A new preparation cannot bypass
 the original shared stay/state claim. Do not delete claims or invent a new stay.
-The existing separately authorized retry/reconciliation procedure remains the
-only authority for a second attempt; this endpoint does not grant one.
+The existing local `retry-sms` / `owner-sms` procedure is the authority for another attempt. `work/messenger_workflow.py` in the manager builds the exact request from its guarded immutable local journal; never invent a proof. The authenticated API now supports these separately claimed attempts:
+
+- `action: retry`, same prepared id, phone and text; `recheck` includes kind=local_sms_retry, local operationId, originalOperationId, bindingHash, fresh checkedAt, evidenceHash, noConfirmedSend=true. Positive original receipt blocks retry. Exactly one corrective remote claim exists per original stay/state across restarts/preparations. If original receipt is missing, wait120s after the original request before retrying to avoid overlapping requests.
+- `action: owner-send`, the same binding plus recheck kind=owner_sms, specific grantId and expiresAt. Each new documented owner instruction permits one separately journaled attempt, including after a confirmed original. Replaying the same instruction cannot send again, nor restart the automatic budget.
+- `status` / `reconcile` for a corrective attempt take attemptKind=retry or owner and grantId for owner. Reconcile only repairs history from a stored receipt; it never calls the SMS provider.
+- `reconcile-prepare`, same stable preparation id, can read Google to recover positive evidence for an ambiguous original Wallet request. It never repeats PUT/SMS. If Wallet is confirmed and the link is missing, repeating prepare with the same id and fresh verified sources completes only the missing link. Existing shared snapshots cannot change.
+
+The ordinary/manual SMS endpoint keeps its existing protections. Manager-only authorization is a server-side capability, never an HTTP body flag. No claim/history is deleted. Booking/portal/email remain independent.
 
 No historical replay. No retroactive repair or resend to Plačková in this release.
 Manual UI sending, manual repeat safeguards and existing short links stay valid.

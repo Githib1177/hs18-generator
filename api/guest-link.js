@@ -17,8 +17,13 @@ export function createGuestLinkHandler({store=redis}={}){return async(req,res)=>
   if(!isAuthorized(req))return res.status(401).json({error:'Přihlaste se ke správě Wallet.'});
   let urls;try{urls=Object.fromEntries(['cs','en','de'].map(lang=>[lang,destination(req.body?.urls?.[lang],lang)]));}catch{return res.status(400).json({error:'Odkaz musí vést na portál Hillside se správným stavem pobytu.'});}
   try{
-   const id=randomBytes(16).toString('base64url');
-   if(await store(['SET',prefix+id,JSON.stringify(urls),'EX',lifetime,'NX'])!=='OK')throw Error('Write failed');
+   const supplied=req.body?.id;
+   if(supplied!==undefined&&(typeof supplied!=='string'||!/^[A-Za-z0-9_-]{22}$/.test(supplied)))return res.status(400).json({error:'Neplatný identifikátor přípravy odkazu.'});
+   const id=supplied||randomBytes(16).toString('base64url');
+   if(await store(['SET',prefix+id,JSON.stringify(urls),'EX',lifetime,'NX'])!=='OK'){
+    const raw=await store(['GET',prefix+id]);
+    if(!supplied||raw!==JSON.stringify(urls))return res.status(409).json({error:'Neměnný odkaz už patří jiné přípravě.'});
+   }
    const root='https://hs18-generator.vercel.app/s/'+id;
    return res.status(200).json({urls:{cs:root,en:root+'/en',de:root+'/de'}});
   }catch{return res.status(503).json({error:'Krátký odkaz se nepodařilo uložit. Zpráva nebyla odeslána; zkuste to znovu.'});}
