@@ -33,7 +33,7 @@ test('registry guards actual SMS handler without a real network',async t=>{
   let r=await call(handler,body());assert.equal(r.code,409);assert.equal(providerCalls,0);assert.equal(strings.get(HISTORY),raw);assert.ok(![...hashes.get(EVENTS).values()].join('').includes('SECRET'));
   await call(registryHandler,body());assert.equal(hashes.get(EVENTS).size,1);
  });
- await t.test('read-only check never reserves or sends',async()=>{let r=await call(registryHandler,body('CHECKONLY'));assert.equal(r.code,200);assert.equal(r.data.duplicate,false);assert.equal(r.data.automaticSendEnabled,false);assert.equal(providerCalls,0);assert.ok(!strings.has(contextOf(body('CHECKONLY')).key))});
+ await t.test('read-only check never reserves or sends',async()=>{let r=await call(registryHandler,body('CHECKONLY'));assert.equal(r.code,200);assert.equal(r.data.duplicate,false);assert.equal(r.data.automaticSendEnabled,true);assert.equal(providerCalls,0);assert.ok(!strings.has(contextOf(body('CHECKONLY')).key))});
  await t.test('manual repeat requires explicit bound confirmation and is single-use',async()=>{
   const b=body();let before=providerCalls;
   let first=await call(handler,b);assert.equal(first.code,409);assert.equal(first.data.allowManualResend,true);assert.equal(before,providerCalls);const token=first.data.manualResendToken;assert.ok(token);

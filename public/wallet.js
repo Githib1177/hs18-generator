@@ -26,7 +26,7 @@
    if(response.status===401)q('walletLogin').hidden=false;
    if(!response.ok)throw new Error(data.error||'Kartu se nepodařilo aktualizovat.');
    if(fingerprint()!==submitted)throw new Error('Údaje pobytu se změnily. Zkontrolujte hosta a opakujte akci.');
-   if(data.skipped===true&&data.reason==='no-card'){q('walletStatus').textContent='Karta ještě není založená. Odkaz pro hosta funguje bez Wallet; pro první kartu vyplňte platnost pobytu.';return;}
+   if(data.skipped===true&&data.reason==='no-card'){throw new Error('Karta ještě není založená. Vyplňte ověřenou platnost pobytu, potvrďte údaje a vytvořte kartu. Bez Wallet se nový odkaz ani SMS nevytvoří.');}
    if(!/^[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(data.guestToken||'')||!['pending','ready'].includes(data.state)||(done&&paid&&data.state!=='ready'))throw new Error('Google nepotvrdil správný stav karty.');
    card={token:data.guestToken,fingerprint:submitted};q('walletOpen').href=location.origin+'/api/wallet-save?token='+encodeURIComponent(data.guestToken);q('walletOpen').hidden=false;
    q('walletStatus').textContent=data.state==='ready'?'Google potvrdil aktualizaci: apartmán, podpora, odkaz do Alfréda a kód dveří.':'Google potvrdil aktualizaci: apartmán, podpora a odkaz do Alfréda. Kód dveří není zveřejněný.';

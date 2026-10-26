@@ -9,6 +9,7 @@ export function createWalletHandler({store=redis,getConfig=walletConfig,putObjec
  res.setHeader('Cache-Control','no-store');
  if(!isAuthorized(req))return res.status(401).json({error:'Přihlaste se ke správě Wallet heslem Falconi Messengeru.'});
  if(req.method!=='POST')return res.status(405).json({error:'Nepovolená metoda.'});
+ if(process.env.VERCEL_ENV&&process.env.VERCEL_ENV!=='production')return res.status(403).json({error:'Preview nemění karty Wallet.'});
  let hash,claim;
  try{
   const config=getConfig(),body=req.body||{},now=Date.now();
@@ -29,10 +30,11 @@ export function createWalletHandler({store=redis,getConfig=walletConfig,putObjec
   if(startsAt!==undefined&&(!Number.isFinite(startsAt)||startsAt>=expiresAt))return res.status(400).json({error:'Neplatný začátek pobytu.'});
   const stay={passId:previous?.passId||randomUUID(),expiresAt,releaseAt,...(startsAt!==undefined?{startsAt}:{})};
   const {object,state}=buildWalletObject(stay,body,config,now);
-  const record={...stay,state:null,busyUntil:now+120000};
+  const revision=createHash('sha256').update(JSON.stringify(object)).digest('hex');
+  const record={...stay,revision,state:null,busyUntil:now+120000};
   const write=async value=>{if(await store(['EVAL',commitScript,3,lockKey(hash),stayKey(hash),passKey(stay.passId),claim,JSON.stringify(value)])!==1)throw new Error('Kartu současně změnil jiný požadavek. Zkuste to znovu.');};
   await write(record);await putObject(object,config);await write({...record,state,busyUntil:0});
-  return res.status(200).json({state,passId:stay.passId,guestToken:guestToken(stay.passId,config),saveUrl:makeSaveUrl(object.id,config)});
+  return res.status(200).json({state,revision,passId:stay.passId,guestToken:guestToken(stay.passId,config),saveUrl:makeSaveUrl(object.id,config)});
  }catch(error){return res.status(503).json({error:/^(Neplatný|Google|Wallet|Chybí)/.test(error.message||'')?error.message:'Kartu se nepodařilo aktualizovat. Zkuste to znovu; zpráva nebyla odeslána.'});}
  finally{if(hash&&claim)try{await store(['EVAL',"if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('DEL',KEYS[1]) end return 0",1,lockKey(hash),claim]);}catch{}}
 };}
