@@ -1,5 +1,6 @@
 import registry from '../lib/registry.cjs';
 import manualRepeat from '../lib/manual-resend.cjs';
+import {isAuthorized} from './_wallet-auth.js';
 const {authorized,contextOf,contextFromMessage,checkContext,claim,finish} = registry;
 // SMS Connect accepts at most three 7-bit SMS segments (459 septets).
 export function prepareText(value) {
@@ -22,7 +23,7 @@ export const ERR_MAP = {
   7:'Duplicitní ověřovací údaj',8:'Chyba databáze SMS brány',9:'Nedostatečný kredit nebo denní limit',
   10:'Neplatné telefonní číslo',11:'Prázdný text zprávy',12:'Zpráva je příliš dlouhá; zkraťte ji na nejvýše 459 SMS znaků',13:'Neplatné číslo odesílatele'
 };
-export default async function handler(req, res) {
+async function send(req, res, managerGrant=null) {
   if (req.method !== 'POST') return res.status(405).json({error:'Method not allowed'});
   const {to,text} = req.body || {};
   const message = prepareText(text);
@@ -53,7 +54,11 @@ export default async function handler(req, res) {
       const duplicate=(await checkContext(context)).duplicate;
       const token=req.body?.manualResendToken;
       if(token&&(!req.body?.context||req.body?.mode!=='manual'||!authorized(req)))return res.status(401).json({ok:false,error:'Ruční opakování není ověřeno.'});
-      if(duplicate){
+      if(managerGrant){
+        if(!isAuthorized(req)||!['retry','owner'].includes(managerGrant.kind)||managerGrant.originalKey!==context.key||!/^[a-f0-9]{64}$/.test(managerGrant.authorizationHash||'')||managerGrant.key!==(context.key+(managerGrant.kind==='retry'?':retry1':':owner:'+managerGrant.authorizationHash)))return res.status(401).json({ok:false,error:'Neplatná vazba povoleného pokusu.'});
+        if(token)return res.status(400).json({ok:false,error:'Automatický pokus není ruční opakování.'});
+        context={...context,repeatOf:context.key,key:managerGrant.key,managerAttempt:managerGrant.kind,authorizationHash:managerGrant.authorizationHash};
+      }else if(duplicate){
         const safety=await manualRepeat.assess(context);
         if(!safety.allowed)return res.status(409).json({ok:false,error:safety.reason,allowManualResend:false});
         if(!token)return res.status(409).json({ok:false,error:safety.reason,allowManualResend:!!req.body?.context&&authorized(req),manualResendToken:req.body?.context&&authorized(req)?manualRepeat.issue(context,message,numbers):undefined});
@@ -87,5 +92,9 @@ export default async function handler(req, res) {
   if(context&&event){try{await finish(context,event,results);}catch{registryWarning='Výsledek se nepodařilo doplnit do registru. Pokus zůstává uzamčen; před opakováním zkontrolujte bránu.';}}
   return res.status(200).json({ok:results.some(r=>r.ok),results,registryWarning});
 }
+
+// Internal server-only entry point. HTTP request bodies cannot supply this grant.
+export async function sendAuthorizedAttempt(req,res,grant){return send(req,res,grant);}
+export default async function handler(req,res){return send(req,res);}
 
 
