@@ -9,7 +9,7 @@ function setup({restDenied=false,changeRoom=false}={}){
  const acct={resId:456,groupAccount:{total:1250,paid:1250,needPay:false,items:[{coaId:1,comId:123,owner:{type:'guest',id:7},price:1250,paid:1250,count:1}]}};
  const reader=createPrevioReader({env:{PREVIO_API_KEY:'synthetic'},now:clock,fetcher:async(url,options)=>{
   calls.push({url,options});let raw;
-  if(url.includes('/rest/'))return {ok:!restDenied,status:restDenied?403:200,text:async()=>JSON.stringify(url.includes('/account?')?acct:booking)};
+  if(url.includes('/rest/')){assert.equal(options.headers['X-Previo-Hotel-Id'],'763519');assert.equal(options.headers['X-Previo-Language-ID'],'1');assert.equal(options.headers.Authorization,'ApiKey synthetic');return {ok:!restDenied,status:restDenied?403:200,text:async()=>JSON.stringify(url.includes('/account?')?acct:booking)};}
   assert.equal(options.method,'POST');assert.equal(options.redirect,'error');assert.equal(options.headers.Authorization,'ApiKey synthetic');
   if(url.endsWith('/get'))raw='<hotel><hotId>763519</hotId><isTest>false</isTest></hotel>';
   else{assert.ok(url.endsWith('/searchReservations'));raw='<reservations>'+room().replace('Apt3',changeRoom?'Apt2':'Apt3')+'</reservations>';}
