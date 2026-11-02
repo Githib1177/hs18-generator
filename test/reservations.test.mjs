@@ -1,6 +1,6 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
 import {createCipheriv,createHash} from 'node:crypto';
-import {apiKey,createPrevioReader,dateWindows,parseXml,onlineCheckin,guestPayment} from '../lib/previo-reservations.js';
+import {apiKey,createPrevioReader,dateWindows,parseXml,onlineCheckin,guestPayment,alfredCode} from '../lib/previo-reservations.js';
 import {createReservationsHandler} from '../api/reservations.js';
 const clock=()=>new Date('2026-11-02T12:00:00Z');
 const room=(extra='')=>'<reservation><comId>123</comId><resId>456</resId><voucher>1234567890</voucher><term><from>2027-01-15 14:00:00</from><to>2027-01-20 10:00:00</to></term><status><statusId>2</statusId></status><object><name>Apt3</name></object><guest><gueId>7</gueId><firstName>Žaneta</firstName><lastName>Nováková</lastName><phone>+420777000001</phone></guest><alfredCode>SYNTH01</alfredCode><lanId>3</lanId><note>Must never be exported</note>'+extra+'</reservation>';
@@ -26,6 +26,11 @@ test('name matching ignores diacritics and case',async()=>{const s=setup();asser
 test('query is escaped as XML text',async()=>{const s=setup();await s.reader.search('<x>');assert.match(s.calls[1].options.body,/<fulltext>&lt;x&gt;<\/fulltext>/)});
 test('date windows cover recent and future stays without any more than 90 days',()=>{const windows=dateWindows(clock());assert.equal(windows[0].from,'2026-10-03');assert.equal(windows.at(-1).to,'2027-11-02');for(const w of windows)assert.ok((Date.parse(w.to)-Date.parse(w.from))/86400000<=90)});
 test('detail fetches exact stay, verified state and excludes notes or door PIN',async()=>{const s=setup();const d=await s.reader.detail(selected);assert.equal(d.checkinComplete,true);assert.equal(d.paymentComplete,true);assert.equal(d.alf,'SYNTH01');assert.equal(d.lang,'de');assert.equal(d.phone,'+420777000001');assert.ok(!('note'in d));assert.ok(!('door'in d));assert.match(s.calls.find(c=>c.url.endsWith('/searchReservations')).options.body,/<comId>123<\/comId>/)});
+test('current API Alfred list selects only the unique room code, never the group code',()=>{
+ const parsed=parseXml('<reservations>'+room().replace('<alfredCode>SYNTH01</alfredCode>','<alfredCodeList><alfredCode><code>ROOM001</code><type>room</type></alfredCode><alfredCode><code>GROUP01</code><type>group</type></alfredCode></alfredCodeList>')+'</reservations>','reservations');assert.equal(alfredCode(parsed.reservation[0]),'ROOM001');
+ assert.equal(alfredCode({alfredCodeList:{alfredCode:[{code:'ROOM001',type:'room'},{code:'ROOM002',type:'room'}]}}),'');assert.equal(alfredCode({alfredCodeList:{alfredCode:{code:'GROUP01',type:'group'}}}),'');
+});
+test('legacy Alfred URL accepts only the original allowed login host',()=>{assert.equal(alfredCode({alfredCode:'https://alfred.previo.app/login/SYNTH01'}),'SYNTH01');assert.equal(alfredCode({alfredCode:'https://attacker.invalid/login/SYNTH01'}),'')});
 test('wrong apartment prevents detail from being used',async()=>{const s=setup({changeRoom:true});await assert.rejects(s.reader.detail(selected),/změnila/)});
 test('checked-out stay is not presented as an active arrival',async()=>{const reader=createPrevioReader({env:{PREVIO_API_KEY:'synthetic'},now:clock,fetcher:async url=>({ok:true,text:async()=>url.endsWith('/get')?'<hotel><hotId>763519</hotId><isTest>false</isTest></hotel>':'<reservations>'+room().replace('<statusId>2</statusId>','<statusId>9</statusId>')+'</reservations>'})});assert.equal((await reader.search('No')).items.length,0);await assert.rejects(reader.detail(selected),/změnila/)});
 test('REST permission failure keeps identity but returns UNKNOWN states',async()=>{const s=setup({restDenied:true});const d=await s.reader.detail(selected);assert.equal(d.id,'123');assert.equal(d.checkinComplete,null);assert.equal(d.paymentComplete,null);assert.match(d.stateNotice,/nepodařilo ověřit/)});
