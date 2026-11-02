@@ -1,13 +1,39 @@
 (()=>{
  const q=id=>document.getElementById(id),panel=document.createElement('section');panel.className='card';panel.id='walletPanel';
- panel.innerHTML=`<h2>Karta pobytu v Google Wallet</h2><p>Na kartě je apartmán, kontakt podpory a přímý odkaz na online check-in a správu pobytu v Alfrédovi. Kód dveří se doplní až po dokončeném check-inu a zaplacení. Existující karta se aktualizuje při vytvoření odkazu a před odesláním SMS.</p><div id="walletLogin"><label for="walletPassword">Heslo Falconi Messengeru pro správu karet</label><input id="walletPassword" type="password" autocomplete="current-password"><button id="walletLoginButton" type="button" class="btn btn-dark">Přihlásit Wallet</button></div><div class="row"><div class="field"><label for="walletRelease">Přístup nejdříve</label><input id="walletRelease" type="datetime-local"></div><div class="field"><label for="walletExpires">Konec platnosti pobytu</label><input id="walletExpires" type="datetime-local"></div></div><p class="muted">Časy vyplňte při prvním vytvoření karty nebo opravě platnosti. Při dalších zprávách je znovu zadávat nemusíte. Telefon potřebuje internet pro aktualizaci.</p><label><input id="walletConfirm" type="checkbox"> Potvrzuji správný Alfréd kód, apartmán, stav check-inu a platby, platnost pobytu a při dokončeném pobytu správný připravený kód dveří.</label><p><button id="walletCreate" type="button" class="btn btn-primary">Vytvořit / opravit kartu</button> <a id="walletOpen" class="btn btn-ghost" target="_blank" rel="noopener noreferrer" hidden>Otevřít kartu</a></p><p id="walletStatus" role="status" aria-live="polite"></p>`;
+ panel.innerHTML=`<h2>Karta pobytu v Google Wallet</h2><p>Na kartě je apartmán, kontakt podpory a přímý odkaz na online check-in a správu pobytu v Alfrédovi. Kód dveří se doplní až po dokončeném check-inu a zaplacení. Výběr rezervace z Previa kartu automaticky připraví a vyplní platnost. Při otevřeném Messengeru se vybraný pobyt průběžně ověřuje a stejná karta aktualizuje.</p><div id="walletLogin"><label for="walletPassword">Heslo Falconi Messengeru pro správu karet</label><input id="walletPassword" type="password" autocomplete="current-password"><button id="walletLoginButton" type="button" class="btn btn-dark">Přihlásit Wallet</button></div><div class="row"><div class="field"><label for="walletRelease">Přístup nejdříve</label><input id="walletRelease" type="datetime-local"></div><div class="field"><label for="walletExpires">Konec platnosti pobytu</label><input id="walletExpires" type="datetime-local"></div></div><p class="muted">Při výběru rezervace se časy načtou automaticky z Previa. Ruční zadání slouží pro samostatnou přípravu bez výběru rezervace. Telefon potřebuje internet pro aktualizaci.</p><label><input id="walletConfirm" type="checkbox"> Potvrzuji správný Alfréd kód, apartmán, stav check-inu a platby, platnost pobytu a při dokončeném pobytu správný připravený kód dveří.</label><p><button id="walletCreate" type="button" class="btn btn-primary">Vytvořit / opravit kartu</button> <a id="walletOpen" class="btn btn-ghost" target="_blank" rel="noopener noreferrer" hidden>Otevřít kartu</a></p><p id="walletStatus" role="status" aria-live="polite"></p>`;
  q('reservationStateCard').closest('.card').after(panel);
- let card=null,busy=false;
+ let card=null,busy=false,loadedStay=null,autoSequence=0,refreshTimer;
  const fingerprint=()=>JSON.stringify(['alf','apt','door','checkinComplete','paymentComplete','guestName','lang','baseUrl','walletRelease','walletExpires'].map(id=>q(id)?.type==='checkbox'?q(id).checked:q(id)?.value));
  const clear=()=>{card=null;q('walletOpen').hidden=true;q('walletOpen').removeAttribute('href');q('walletConfirm').checked=false;for(const id of ['urlsCard','textsCard','doorInfoCard'])if(q(id))q(id).style.display='none';};
  document.addEventListener('input',event=>{if(['alf','door','checkinComplete','paymentComplete','guestName','lang','baseUrl','walletRelease','walletExpires'].includes(event.target.id))clear();});
  document.addEventListener('hillside:apartment-changed',clear);
- document.addEventListener('hillside:stay-loaded',()=>{clear();q('walletRelease').value='';q('walletExpires').value='';});
+ const localTime=iso=>{const d=new Date(iso);return Number.isFinite(d.getTime())?new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(d).replace(' ','T'):'';};
+ const sameStay=s=>loadedStay===s&&q('alf').value===s.alf&&q('apt').value===s.apt;
+ async function syncLoaded(s){
+  clearTimeout(refreshTimer);const sequence=autoSequence;
+  if(!sameStay(s))return;
+  if(busy){refreshTimer=setTimeout(()=>syncLoaded(s),1000);return;}
+  busy=true;q('walletCreate').disabled=true;q('walletStatus').textContent='Načítám kartu a platnost z Previa…';
+  try{
+   const reservation=Object.fromEntries(['id','resId','voucher','apt','arrival','departure'].map(k=>[k,s[k]]));
+   const response=await fetch('/api/wallet',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'from-reservation',reservation})}),data=await response.json();
+   if(sequence!==autoSequence||!sameStay(s))return;
+   if(response.status===401)q('walletLogin').hidden=false;
+   if(!response.ok)throw Error(data.error||'Automatickou aktualizaci karty se nepodařilo ověřit.');
+   if(!/^[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(data.guestToken||'')||!['pending','ready'].includes(data.state))throw Error('Google nepotvrdil kartu.');
+   q('walletRelease').value=localTime(data.releaseAt);q('walletExpires').value=localTime(data.expiresAt);
+   q('door').value=data.state==='ready'?data.doorCode||'':'';
+   for(const id of ['checkinComplete','paymentComplete']){q(id).checked=data[id]===true;q(id).indeterminate=false;q(id).dispatchEvent(new Event('change',{bubbles:true}));}
+   card={token:data.guestToken,fingerprint:fingerprint()};q('walletOpen').href=location.origin+'/api/wallet-save?token='+encodeURIComponent(data.guestToken);q('walletOpen').hidden=false;
+   q('walletStatus').textContent=data.accessPending?'Karta je připravená s platností z Previa. Check-in a platba jsou hotové; zveřejnění kódu čeká na ověřené přístupy.':data.state==='ready'?'Karta je aktuální a obsahuje ověřený kód dveří.':'Karta je připravená s platností z Previa. Kód se doplní po splnění podmínek přístupů.';
+   refreshTimer=setTimeout(()=>syncLoaded(s),60000);
+  }catch(e){if(sequence===autoSequence&&sameStay(s)){clear();for(const id of ['checkinComplete','paymentComplete'])q(id).indeterminate=true;q('walletStatus').textContent=e.message;}}
+  finally{busy=false;q('walletCreate').disabled=false;}
+ }
+ document.addEventListener('hillside:stay-loaded',event=>{
+  ++autoSequence;clearTimeout(refreshTimer);clear();q('walletRelease').value=localTime(event.detail?.releaseAt);q('walletExpires').value=localTime(event.detail?.expiresAt);loadedStay=event.detail||null;
+  if(loadedStay?.alf){const stay=loadedStay;setTimeout(()=>syncLoaded(stay),0);}
+ });
  window.hillsideWalletLink=url=>{if(!card||card.fingerprint!==fingerprint())return url;const parsed=new URL(url);if(parsed.origin!=='https://hillside18-guest-portal.vercel.app')return url;const hash=new URLSearchParams(parsed.hash.slice(1));hash.set('wallet',card.token);parsed.hash=hash.toString();return parsed.href;};
  q('walletLoginButton').addEventListener('click',async()=>{
   const button=q('walletLoginButton');button.disabled=true;

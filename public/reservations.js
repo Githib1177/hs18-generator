@@ -13,12 +13,12 @@
    if(!s||s.id!==item.id||s.resId!==item.resId||s.voucher!==item.voucher||s.apt!==item.apt||s.arrival!==item.arrival||s.departure!==item.departure)throw Error('Rezervace se změnila. Vyhledejte ji znovu.');
    // Clear ALL guest-specific output and access state before filling a new stay.
    applying=true;
-   q('guestName').value=s.guestName||'';q('guestIsFemale').value='auto';q('alf').value=s.alf||'';q('phone').value=s.phone||'';q('lang').value=['cs','en','de'].includes(s.lang)?s.lang:'cs';q('door').value='';
+   q('guestName').value=s.guestName||'';q('guestIsFemale').value='auto';q('alf').value=s.alf||'';q('phone').value=s.phone||'';q('lang').value=['cs','en','de'].includes(s.lang)?s.lang:'cs';q('door').value=s.accessConfirmed===true?s.accessCode||'':'';
    for(const id of ['checkinComplete','paymentComplete']){q(id).checked=s[id]===true;q(id).indeterminate=typeof s[id]!=='boolean';}
    q('checkinComplete').dispatchEvent(new Event('change',{bubbles:true}));q('paymentComplete').dispatchEvent(new Event('change',{bubbles:true}));
    document.querySelector('[data-apt="'+s.apt+'"]').click();
    for(const id of ['guestName','guestIsFemale','alf','phone','lang','door'])q(id).dispatchEvent(new Event('change',{bubbles:true}));
-   document.dispatchEvent(new Event('hillside:stay-loaded'));
+   document.dispatchEvent(new CustomEvent('hillside:stay-loaded',{detail:s}));
    for(const id of ['urlsCard','textsCard','doorInfoCard'])if(q(id))q(id).style.display='none';
    if(q('urls'))q('urls').replaceChildren();
    if(q('smsTableWrap'))q('smsTableWrap').style.display='none';

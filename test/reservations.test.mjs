@@ -1,6 +1,6 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
 import {createCipheriv,createHash} from 'node:crypto';
-import {apiKey,createPrevioReader,dateWindows,parseXml,onlineCheckin,guestPayment,alfredCode} from '../lib/previo-reservations.js';
+import {apiKey,createPrevioReader,dateWindows,parseXml,onlineCheckin,guestPayment,alfredCode,pragueInstant,accessCode} from '../lib/previo-reservations.js';
 import {createReservationsHandler} from '../api/reservations.js';
 const clock=()=>new Date('2026-11-02T12:00:00Z');
 const room=(extra='')=>'<reservation><comId>123</comId><resId>456</resId><voucher>1234567890</voucher><term><from>2027-01-15 14:00:00</from><to>2027-01-20 10:00:00</to></term><status><statusId>2</statusId></status><object><name>Apt3</name></object><guest><gueId>7</gueId><firstName>Žaneta</firstName><lastName>Nováková</lastName><phone>+420777000001</phone></guest><alfredCode>SYNTH01</alfredCode><lanId>3</lanId><note>Must never be exported</note>'+extra+'</reservation>';
@@ -17,6 +17,11 @@ function setup({restDenied=false,changeRoom=false}={}){
  }});return {reader,calls,booking,acct};
 }
 const selected={id:'123',resId:'456',voucher:'1234567890',apt:'3',arrival:'2027-01-15',departure:'2027-01-20'};
+test('PMS times use Prague winter/summer offset and reject ambiguous local times',()=>{assert.equal(pragueInstant('2027-01-15 14:00:00'),'2027-01-15T13:00:00.000Z');assert.equal(pragueInstant('2027-07-15 14:00:00'),'2027-07-15T12:00:00.000Z');assert.throws(()=>pragueInstant('2027-03-28 02:30:00'));assert.throws(()=>pragueInstant('2027-10-31 02:30:00'));});
+test('access marker must match exact room, apartment, times and be unique',()=>{
+ const marker='[HS18-ACCESS-V1;COM=123;APT=3;FROM=2027-01-15T14:00:00;TO=2027-01-20T10:00:00;VERIFIED=APARTMENT,SKIROOM]<b><u>Kód - 0258</u></b>[/HS18-ACCESS]',x={note:marker,term:{from:'2027-01-15 14:00:00',to:'2027-01-20 10:00:00'}};
+ assert.equal(accessCode(x,selected),'0258');for(const note of ['Kód - 0258',marker+marker,marker.replace('APT=3','APT=2'),marker.replace('COM=123','COM=999'),marker.replace('TO=2027-01-20','TO=2027-01-21')])assert.equal(accessCode({...x,note},selected),'');
+});
 test('search name or voucher uses bounded read calls and deduplicates overlapping windows',async()=>{
  const s=setup();const a=await s.reader.search('no');assert.equal(a.items.length,1);assert.equal(a.items[0].guestName,'Žaneta Nováková');assert.equal(a.items[0].apt,'3');assert.ok(!('phone'in a.items[0]));assert.ok(!('alf'in a.items[0]));assert.ok(!('note'in a.items[0]));
  assert.equal((await s.reader.search('1234')).items.length,1);assert.ok(s.calls.every(c=>/\/(get|searchReservations)$/.test(c.url)));
