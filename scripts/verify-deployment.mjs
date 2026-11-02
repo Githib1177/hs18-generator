@@ -4,7 +4,7 @@ import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
 const repo='Githib1177/hs18-generator';
-const protectedPath=p=>/^(api|lib|public|scripts)\//.test(p)||['vercel.json','package.json','package-lock.json','.vercelignore'].includes(p);
+const protectedPath=p=>/^(api|lib|public|scripts)\//.test(p)||['vercel.json','package.json','package-lock.json','pnpm-lock.yaml','.vercelignore'].includes(p);
 export const blobHash=bytes=>createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
 export const canonical=value=>JSON.stringify(value&&typeof value==='object'?Array.isArray(value)?value.map(v=>JSON.parse(canonical(v))):Object.fromEntries(Object.keys(value).sort().map(k=>[k,JSON.parse(canonical(value[k]))])):value);
 export async function verifyDeployment({env=process.env,fetcher=fetch,root=process.cwd()}={}){

@@ -12,6 +12,7 @@ test('production gate rejects old commits, local uploads, changed/missing/extra 
   await assert.rejects(verifyDeployment({env,root,fetcher:async()=>({ok:false,status:503})}));
   await writeFile(join(root,'public/index.html'),'stale');await assert.rejects(verifyDeployment({env,fetcher,root}),/differs/);await writeFile(join(root,'public/index.html'),'fixture');
   await writeFile(join(root,'api/old.js'),'stale');await assert.rejects(verifyDeployment({env,fetcher,root}),/Untracked/);await rm(join(root,'api/old.js'));
+  tree.push({path:'pnpm-lock.yaml',type:'blob',mode:'100644',sha:blobHash(Buffer.from('fixture'))});await writeFile(join(root,'pnpm-lock.yaml'),'fixture');await verifyDeployment({env,fetcher,root});await writeFile(join(root,'pnpm-lock.yaml'),'stale dependencies');await assert.rejects(verifyDeployment({env,fetcher,root}),/differs/);await writeFile(join(root,'pnpm-lock.yaml'),'fixture');
   await rm(join(root,'scripts/verify-deployment.mjs'));await assert.rejects(verifyDeployment({env,fetcher,root}));
   assert.equal((await verifyDeployment({env:{VERCEL_ENV:'preview'},fetcher,root})).preview,true);
  }finally{await rm(root,{recursive:true,force:true});}
