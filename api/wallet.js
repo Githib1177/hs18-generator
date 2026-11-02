@@ -44,8 +44,14 @@ export function createWalletHandler({store=redis,getConfig=walletConfig,putObjec
   const revision=createHash('sha256').update(JSON.stringify(object)).digest('hex');
   const record={...stay,revision,state:null,busyUntil:now+120000};
   const write=async value=>{if(await store(['EVAL',commitScript,3,lockKey(hash),stayKey(hash),passKey(stay.passId),claim,JSON.stringify(value)])!==1)throw new Error('Kartu současně změnil jiný požadavek. Zkuste to znovu.');};
-  if(!(automatic&&previous?.revision===revision&&previous.state===state)){await write(record);await putObject(object,config);await write({...record,state,busyUntil:0});}
-  return res.status(200).json({state,revision,passId:stay.passId,guestToken:guestToken(stay.passId,config),saveUrl:makeSaveUrl(object.id,config),...(automatic?{startsAt:new Date(startsAt).toISOString(),releaseAt:new Date(releaseAt).toISOString(),expiresAt:new Date(expiresAt).toISOString(),checkinComplete:body.checkinComplete,paymentComplete:body.paymentComplete,doorCode:state==='ready'?body.doorCode:'',...(body.testCode==='TEST'?{testCode:'TEST'}:{}),accessPending:body.checkinComplete&&body.paymentComplete&&!body.accessConfirmed}:{})});
+  const changed=!(automatic&&previous?.revision===revision&&previous.state===state);
+  if(changed){await write(record);await putObject(object,config);}
+  if(automatic){
+   const saved=await getObject(object.id,config),value=(v,k)=>v?.[k]?.defaultValue?.value;
+   if(!saved||saved.id!==object.id||Date.parse(saved.validTimeInterval?.start?.date)!==startsAt||Date.parse(saved.validTimeInterval?.end?.date)!==expiresAt||value(saved,'header')!==value(object,'header')||value(saved,'cardTitle')!==value(object,'cardTitle')||!object.textModulesData.every(m=>saved.textModulesData?.some(v=>v.id===m.id&&v.body===m.body&&v.header===m.header))||(!object.textModulesData.some(m=>m.id==='door')&&saved.textModulesData?.some(m=>m.id==='door')))throw Error('Google nepotvrdil nezávislé ověření obsahu a platnosti karty.');
+  }
+  if(changed)await write({...record,state,busyUntil:0});
+  return res.status(200).json({state,revision,passId:stay.passId,guestToken:guestToken(stay.passId,config),saveUrl:makeSaveUrl(object.id,config),...(automatic?{googleReadbackVerified:true,startsAt:new Date(startsAt).toISOString(),releaseAt:new Date(releaseAt).toISOString(),expiresAt:new Date(expiresAt).toISOString(),checkinComplete:body.checkinComplete,paymentComplete:body.paymentComplete,doorCode:state==='ready'?body.doorCode:'',...(body.testCode==='TEST'?{testCode:'TEST'}:{}),accessPending:body.checkinComplete&&body.paymentComplete&&!body.accessConfirmed}:{})});
  }catch(error){return res.status(503).json({error:/^(Neplatný|Google|Wallet|Chybí)/.test(error.message||'')?error.message:'Kartu se nepodařilo aktualizovat. Zkuste to znovu; zpráva nebyla odeslána.'});}
  finally{if(hash&&claim)try{await store(['EVAL',"if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('DEL',KEYS[1]) end return 0",1,lockKey(hash),claim]);}catch{}}
 };}

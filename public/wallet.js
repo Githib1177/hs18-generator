@@ -25,7 +25,7 @@
    q('door').value=data.testCode==='TEST'?'TEST':data.state==='ready'?data.doorCode||'':'';
    for(const id of ['checkinComplete','paymentComplete']){q(id).checked=data[id]===true;q(id).indeterminate=false;q(id).dispatchEvent(new Event('change',{bubbles:true}));}
    card={token:data.guestToken,fingerprint:fingerprint()};q('walletOpen').href=location.origin+'/api/wallet-save?token='+encodeURIComponent(data.guestToken);q('walletOpen').hidden=false;
-   q('walletStatus').textContent=data.accessPending?'Karta je připravená s platností z Previa. Check-in a platba jsou hotové; zveřejnění kódu čeká na ověřené přístupy.':data.state==='ready'?'Karta je aktuální a obsahuje ověřený kód dveří.':'Karta je připravená s platností z Previa. Kód se doplní po splnění podmínek přístupů.';
+   q('walletStatus').textContent=(data.googleReadbackVerified?'Google ověřil platnost i obsah karty. ':'')+(data.testCode==='TEST'?'Na kartě je Kód - TEST, označený NEFUNKČNÍ TEST — BEZ PŘÍSTUPU.':data.accessPending?'Karta je připravená s platností z Previa. Check-in a platba jsou hotové; zveřejnění kódu čeká na ověřené přístupy.':data.state==='ready'?'Karta je aktuální a obsahuje ověřený kód dveří.':'Karta je připravená s platností z Previa. Kód se doplní po splnění podmínek přístupů.');
    refreshTimer=setTimeout(()=>syncLoaded(s),60000);
   }catch(e){if(sequence===autoSequence&&sameStay(s)){clear();for(const id of ['checkinComplete','paymentComplete'])q(id).indeterminate=true;q('walletStatus').textContent=e.message;}}
   finally{busy=false;q('walletCreate').disabled=false;}
