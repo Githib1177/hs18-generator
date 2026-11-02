@@ -32,6 +32,8 @@
     .btn-dark{background:var(--dark);color:#fff}
     .btn-ghost{background:#fff;border:2px solid var(--dark);color:var(--dark)}
     .muted{color:var(--muted);font-size:.92rem}
+    .reservation-option{display:block;width:100%;text-align:left;border:1px solid #dbe5e0;border-radius:8px;background:white;color:var(--dark);padding:12px;margin-top:5px;font:inherit;cursor:pointer}
+    .reservation-option:hover,.reservation-option[aria-selected=true]{background:#ecfdf5;border-color:var(--accent)}
     .pill{display:inline-block;background:#ecfdf5;border:1px solid #bbf7d0;color:#065f46;padding:.1rem .5rem;border-radius:8px;font-weight:700}
     .urls a{display:inline-block;margin:6px 8px 0 0;text-decoration:none}
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
@@ -73,6 +75,12 @@
 
     <!-- VSTUPY -->
     <div class="card">
+      <div class="field" style="margin-bottom:18px">
+        <label for="reservationSearch">Vyhledat rezervaci z Previa</label>
+        <input id="reservationSearch" type="search" maxlength="80" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="reservationSuggestions" aria-describedby="reservationSearchStatus" placeholder="Alespoň dvě písmena jména nebo část čísla rezervace">
+        <div id="reservationSearchStatus" class="muted" role="status" aria-live="polite">Aktivní pobyty za posledních 30 dnů a příštích 12 měsíců. Vyhledání ani výběr nic neodesílají.</div>
+        <ul id="reservationSuggestions" role="listbox" aria-label="Odpovídající rezervace" style="list-style:none;padding:0;margin:0"></ul>
+      </div>
       <div class="row">
         <div class="field">
           <label>Jméno hosta</label>
@@ -112,7 +120,7 @@
       </div>
 
       <div id="reservationStateCard" class="card reservation-state-card state-incomplete" style="margin-top:12px;background:#f8fafc;box-shadow:none;border:1px solid #e5e7eb">
-        <label>Stav rezervace</label>
+        <label>Online check-in a platba</label>
         <input id="state" type="hidden" value="none">
         <div class="switches" style="margin-top:8px">
           <label class="switch-card"><input id="checkinComplete" type="checkbox"><span>Check-in všech hostů dokončen</span></label>
@@ -353,7 +361,7 @@
       el('state').value = state;
       el('reservationStateCard').classList.toggle('state-done', state === 'done');
       el('reservationStateCard').classList.toggle('state-incomplete', state !== 'done');
-      el('statePreview').textContent = state === 'done'
+      el('statePreview').textContent = el('checkinComplete').indeterminate || el('paymentComplete').indeterminate ? 'Check-in nebo platba čekají na ověření.' : state === 'done'
         ? 'Vše hotovo – odkaz obsahuje done=1'
         : state === 'unpaid'
           ? 'Check-in je hotový, čeká se na platbu – odkaz obsahuje unpaid=1'
@@ -365,6 +373,8 @@
     }
 
     function setReservationState(state){
+      el('checkinComplete').indeterminate=false;
+      el('paymentComplete').indeterminate=false;
       el('checkinComplete').checked = state === 'unpaid' || state === 'done';
       el('paymentComplete').checked = state === 'done' || state === 'paid';
       updateReservationState();
@@ -760,6 +770,7 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
 }
     // ==== AKCE ====
     window.buildHillsideLinks=async({syncWallet=true}={})=>{
+      if(window.hillsideReservationStatesReady&&!window.hillsideReservationStatesReady())return false;
       builtContext=null;
       const fullName = trim(el('guestName').value);
       const isFemaleSel = el('guestIsFemale').value;
@@ -951,6 +962,7 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
     });
   </script>
   <script src="/wallet.js"></script>
+  <script src="/reservations.js"></script>
 </body>
 </html>
 

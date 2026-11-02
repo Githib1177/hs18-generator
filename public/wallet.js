@@ -15,6 +15,7 @@
  });
  fetch('/api/wallet-auth').then(r=>r.json()).then(data=>{q('walletLogin').hidden=data.ok===true;}).catch(()=>{});
  window.hillsideWalletSync=async({existing=true}={})=>{
+  if(window.hillsideReservationStatesReady&&!window.hillsideReservationStatesReady())throw new Error('Nejdříve ověřte stav check-inu a platby.');
   if(busy)throw new Error('Vyčkejte na dokončení aktualizace karty.');
   const submitted=fingerprint(),done=q('checkinComplete').checked,paid=q('paymentComplete').checked;
   const body={action:existing?'sync-existing':'create',alfred:q('alf').value,apartment:q('apt').value,doorCode:q('door').value.trim(),checkinComplete:done,paymentComplete:paid,accessConfirmed:done&&paid,operatorConfirmed:true,lang:q('lang').value};
