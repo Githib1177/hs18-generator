@@ -13,7 +13,7 @@
    if(!s||s.id!==item.id||s.resId!==item.resId||s.voucher!==item.voucher||s.apt!==item.apt||s.arrival!==item.arrival||s.departure!==item.departure)throw Error('Rezervace se změnila. Vyhledejte ji znovu.');
    // Clear ALL guest-specific output and access state before filling a new stay.
    applying=true;
-   q('guestName').value=s.guestName||'';q('guestIsFemale').value='auto';q('alf').value=s.alf||'';q('phone').value=s.phone||'';q('lang').value=['cs','en','de'].includes(s.lang)?s.lang:'cs';q('door').value=s.accessConfirmed===true?s.accessCode||'':'';
+   q('guestName').value=s.guestName||'';q('guestIsFemale').value='auto';q('alf').value=s.alf||'';q('phone').value=s.phone||'';q('lang').value=['cs','en','de'].includes(s.lang)?s.lang:'cs';q('door').value=s.testCode==='TEST'?'TEST':s.accessConfirmed===true?s.accessCode||'':'';
    for(const id of ['checkinComplete','paymentComplete']){q(id).checked=s[id]===true;q(id).indeterminate=typeof s[id]!=='boolean';}
    q('checkinComplete').dispatchEvent(new Event('change',{bubbles:true}));q('paymentComplete').dispatchEvent(new Event('change',{bubbles:true}));
    document.querySelector('[data-apt="'+s.apt+'"]').click();

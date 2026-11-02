@@ -22,7 +22,7 @@
    if(!response.ok)throw Error(data.error||'Automatickou aktualizaci karty se nepodařilo ověřit.');
    if(!/^[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(data.guestToken||'')||!['pending','ready'].includes(data.state))throw Error('Google nepotvrdil kartu.');
    q('walletRelease').value=localTime(data.releaseAt);q('walletExpires').value=localTime(data.expiresAt);
-   q('door').value=data.state==='ready'?data.doorCode||'':'';
+   q('door').value=data.testCode==='TEST'?'TEST':data.state==='ready'?data.doorCode||'':'';
    for(const id of ['checkinComplete','paymentComplete']){q(id).checked=data[id]===true;q(id).indeterminate=false;q(id).dispatchEvent(new Event('change',{bubbles:true}));}
    card={token:data.guestToken,fingerprint:fingerprint()};q('walletOpen').href=location.origin+'/api/wallet-save?token='+encodeURIComponent(data.guestToken);q('walletOpen').hidden=false;
    q('walletStatus').textContent=data.accessPending?'Karta je připravená s platností z Previa. Check-in a platba jsou hotové; zveřejnění kódu čeká na ověřené přístupy.':data.state==='ready'?'Karta je aktuální a obsahuje ověřený kód dveří.':'Karta je připravená s platností z Previa. Kód se doplní po splnění podmínek přístupů.';

@@ -16,7 +16,7 @@ export function createWalletHandler({store=redis,getConfig=walletConfig,putObjec
   const config=getConfig(),now=Date.now(),automatic=req.body?.action==='from-reservation';let body=req.body||{},source;
   if(automatic){
    source=await reader.detail(body.reservation||{});
-   body={action:'create',operatorConfirmed:true,alfred:source.alf,apartment:source.apt,lang:source.lang,checkinComplete:source.checkinComplete,paymentComplete:source.paymentComplete,accessConfirmed:source.accessConfirmed===true&&/^\d{4}$/.test(source.accessCode||''),doorCode:source.accessCode||'',startsAt:source.startsAt,releaseAt:source.releaseAt,expiresAt:source.expiresAt};
+   body={action:'create',operatorConfirmed:true,alfred:source.alf,apartment:source.apt,lang:source.lang,checkinComplete:source.checkinComplete,paymentComplete:source.paymentComplete,accessConfirmed:source.accessConfirmed===true&&/^\d{4}$/.test(source.accessCode||''),doorCode:source.accessCode||'',startsAt:source.startsAt,releaseAt:source.releaseAt,expiresAt:source.expiresAt,...(source.testCode==='TEST'?{testCode:'TEST'}:{})};
    if(typeof body.checkinComplete!=='boolean'||typeof body.paymentComplete!=='boolean')return res.status(409).json({error:'Stav check-inu nebo platby není ověřený. Karta nebyla změněna.'});
   }
   if(body.operatorConfirmed!==true)return res.status(400).json({error:'Potvrďte správnost údajů pobytu.'});
@@ -45,7 +45,7 @@ export function createWalletHandler({store=redis,getConfig=walletConfig,putObjec
   const record={...stay,revision,state:null,busyUntil:now+120000};
   const write=async value=>{if(await store(['EVAL',commitScript,3,lockKey(hash),stayKey(hash),passKey(stay.passId),claim,JSON.stringify(value)])!==1)throw new Error('Kartu současně změnil jiný požadavek. Zkuste to znovu.');};
   if(!(automatic&&previous?.revision===revision&&previous.state===state)){await write(record);await putObject(object,config);await write({...record,state,busyUntil:0});}
-  return res.status(200).json({state,revision,passId:stay.passId,guestToken:guestToken(stay.passId,config),saveUrl:makeSaveUrl(object.id,config),...(automatic?{startsAt:new Date(startsAt).toISOString(),releaseAt:new Date(releaseAt).toISOString(),expiresAt:new Date(expiresAt).toISOString(),checkinComplete:body.checkinComplete,paymentComplete:body.paymentComplete,doorCode:state==='ready'?body.doorCode:'',accessPending:body.checkinComplete&&body.paymentComplete&&!body.accessConfirmed}:{})});
+  return res.status(200).json({state,revision,passId:stay.passId,guestToken:guestToken(stay.passId,config),saveUrl:makeSaveUrl(object.id,config),...(automatic?{startsAt:new Date(startsAt).toISOString(),releaseAt:new Date(releaseAt).toISOString(),expiresAt:new Date(expiresAt).toISOString(),checkinComplete:body.checkinComplete,paymentComplete:body.paymentComplete,doorCode:state==='ready'?body.doorCode:'',...(body.testCode==='TEST'?{testCode:'TEST'}:{}),accessPending:body.checkinComplete&&body.paymentComplete&&!body.accessConfirmed}:{})});
  }catch(error){return res.status(503).json({error:/^(Neplatný|Google|Wallet|Chybí)/.test(error.message||'')?error.message:'Kartu se nepodařilo aktualizovat. Zkuste to znovu; zpráva nebyla odeslána.'});}
  finally{if(hash&&claim)try{await store(['EVAL',"if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('DEL',KEYS[1]) end return 0",1,lockKey(hash),claim]);}catch{}}
 };}

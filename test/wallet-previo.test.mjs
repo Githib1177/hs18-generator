@@ -21,3 +21,7 @@ test('all done without access proof stays pending; unknown states do not change 
 test('failed Google write is not blindly repeated by automatic refresh',async t=>{
  const s=fixture(t);s.setFail(true);assert.equal((await s.call()).code,503);s.setFail(false);assert.equal((await s.call()).code,409);assert.equal(s.objects.length,0);
 });
+test('literal TEST is visible on a non-operational card and can never become ready',async t=>{
+ const s=fixture(t);s.source.testCode='TEST';s.source.checkinComplete=true;s.source.paymentComplete=true;s.source.accessCode='0258';s.source.accessConfirmed=true;
+ const r=await s.call();assert.equal(r.body.state,'pending');assert.equal(r.body.testCode,'TEST');assert.ok(!s.objects.at(-1).textModulesData.some(x=>x.id==='door'));assert.equal(s.objects.at(-1).textModulesData.find(x=>x.id==='test-only').body,'Kód - TEST');
+});
