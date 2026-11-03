@@ -67,3 +67,9 @@ Preview cannot mutate through this endpoint or the Wallet provisioning endpoint.
 Install the pinned test dependency, then `node --test test/*.test.mjs`.
 Tests replace Google, Redis and SMS with synthetic providers; no real guest send.
 Publish only through current GitHub main and the existing deployment source gate.
+
+# Read-only shared SMS registry (3 November 2026)
+
+`GET /api/manager-history?id=<comId>&resId=<resId>&voucher=<voucher>&apt=<1|2|3>&arrival=<YYYY-MM-DD>&departure=<YYYY-MM-DD>` uses the existing HttpOnly Messenger session. It first verifies the exact current Previo hotel/stay binding and then reads every persisted registry event plus the four original phase claims. It performs only Redis GET/HVALS; no bootstrap, migration, claim, Wallet, link creation or SMS. No history key, Alfred code, PIN, guest name or phone is returned or required in the URL.
+
+The response is SMS evidence only, not verification of all communication channels. It reports recent legacy history as incomplete and preserves unknown/pending/rejected attempts. Empty results must not be treated as proof that no message ever existed before registry coverage. Check the original portal thread and canonical per-stay records separately before a welcome; retain the original reservation guards and atomic dispatch claims. A failed/unauthorized read is not empty history. Managers use the original service=messenger read-navigation/read-snapshot permit and never repeat a denied form write to obtain this result.
