@@ -1,6 +1,9 @@
 import registry from '../lib/registry.cjs';
+import {createManagerHistoryHandler} from '../lib/manager-history-handler.js';
 const {authorized,contextOf,checkContext} = registry;
+const readHistory=createManagerHistoryHandler();
 export default async function handler(req,res){
+  if(req.method==='GET')return readHistory(req,res);
   res.setHeader('Cache-Control','no-store');
   if(!authorized(req))return res.status(401).json({ok:false,error:'Neplatný přístupový klíč historie.'});
   if(req.method!=='POST')return res.status(405).json({ok:false,error:'Method not allowed'});
