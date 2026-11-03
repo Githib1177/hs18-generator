@@ -17,6 +17,15 @@ function setup({restDenied=false,changeRoom=false}={}){
  }});return {reader,calls,booking,acct};
 }
 const selected={id:'123',resId:'456',voucher:'1234567890',apt:'3',arrival:'2027-01-15',departure:'2027-01-20'};
+
+test('registry creation metadata is explicit opt-in; ordinary lookup and Wallet inputs keep their original shape',async()=>{
+ const reader=createPrevioReader({env:{PREVIO_API_KEY:'synthetic'},now:clock,fetcher:async url=>{
+  if(url.includes('/rest/'))return {ok:false,status:403};
+  return {ok:true,text:async()=>url.endsWith('/get')?'<hotel><hotId>763519</hotId><isTest>false</isTest></hotel>':'<reservations>'+room('<created>2026-11-02 21:20:04</created>')+'</reservations>'};
+ }});
+ const ordinary=await reader.detail(selected),registry=await reader.detail(selected,{includeRegistryCreationEvidence:true});
+ assert.ok(!Object.hasOwn(ordinary,'registrySourceCreatedAt'));assert.equal(registry.registrySourceCreatedAt,'2026-11-02T20:20:04.000Z');const {registrySourceCreatedAt,...originalShape}=registry;assert.deepEqual(originalShape,ordinary);
+});
 test('PMS times use Prague winter/summer offset and reject ambiguous local times',()=>{assert.equal(pragueInstant('2027-01-15 14:00:00'),'2027-01-15T13:00:00.000Z');assert.equal(pragueInstant('2027-07-15 14:00:00'),'2027-07-15T12:00:00.000Z');assert.throws(()=>pragueInstant('2027-03-28 02:30:00'));assert.throws(()=>pragueInstant('2027-10-31 02:30:00'));});
 test('access marker must match exact room, apartment, times and be unique',()=>{
  const marker='[HS18-ACCESS-V1;COM=123;APT=3;FROM=2027-01-15T14:00:00;TO=2027-01-20T10:00:00;VERIFIED=APARTMENT,SKIROOM]<b><u>Kód - 0258</u></b>[/HS18-ACCESS]',x={note:marker,term:{from:'2027-01-15 14:00:00',to:'2027-01-20 10:00:00'}};

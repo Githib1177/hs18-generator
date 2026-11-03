@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import registry from '../lib/registry.cjs';
 import {createHistoryReader} from '../lib/manager-history.js';
-import {createManagerHistoryHandler} from '../lib/manager-history-handler.js';
+import {createManagerHistoryHandler,historyCoverage,DURABLE_REGISTRY_VERIFIED_FROM} from '../lib/manager-history-handler.js';
 import {createSessionCookie} from '../api/_wallet-auth.js';
 const selected={id:'123',resId:'456',voucher:'1234567890',apt:'2',arrival:'2027-01-15',departure:'2027-01-20'};
 const stay={...selected,alf:'SYNTHETIC001',phone:'SENSITIVE_PHONE',accessCode:'1234',guestName:'PRIVATE_GUEST'};
@@ -69,4 +69,25 @@ test('actual existing registry GET route authorizes with original cookie and cal
  const res=response();await handler({method:'GET',query:selected,headers:{cookie:createSessionCookie().split(';')[0]}},res);
  assert.equal(res.code,200);assert.equal(res.body.readOnly,true);assert.equal(pms,4);assert.equal(reads,6);assert.doesNotMatch(JSON.stringify(res.body),/SYNTHETIC001|Synthetic Guest/);
  const blocked=response();await handler({method:'GET',query:selected,headers:{'x-history-key':'old-key-without-session'}},blocked);assert.equal(blocked.code,401);assert.equal(pms,4);assert.equal(reads,6);
+});
+test('coverage uses trusted PMS creation time and verified prior production date, not infinite pre-creation history',()=>{
+ assert.equal(historyCoverage('2026-11-02T20:20:04Z','2026-11-03T09:00:00Z').currentReferenceLifetimeCovered,true);
+ for(const created of [undefined,null,'bad','2026-11-02T18:00:00Z','2026-11-04T09:00:00Z'])assert.equal(historyCoverage(created,'2026-11-03T09:00:00Z').currentReferenceLifetimeCovered,false);
+ assert.equal(historyCoverage(DURABLE_REGISTRY_VERIFIED_FROM,'2026-11-03T09:00:00Z').currentReferenceLifetimeCovered,true);
+});
+test('new covered stay can prove no prior SMS without claiming that server read other channels',async()=>{
+ const s=setup(),res=response();await createManagerHistoryHandler({authorize:()=>true,reader:{detail:async()=>({...stay,registrySourceCreatedAt:'2026-11-02T20:20:04Z'})},history:s.history})({method:'GET',query:selected},res);
+ assert.equal(res.code,200);assert.equal(res.body.historyCoverage.currentReferenceLifetimeCovered,true);assert.equal(res.body.legacyRecentHistoryRequiredForThisReservation,false);assert.equal(res.body.absenceIsNotProofOfNoHistoricSend,false);assert.equal(res.body.smsHistoryConclusion,'no_prior_attempt_in_current_reference_lifetime');assert.equal(res.body.allChannelsVerified,false);
+});
+test('legacy or unknown creation remains explicitly incomplete and cannot infer no historic send',async()=>{
+ for(const created of [null,'2026-10-18T10:00:00Z']){const s=setup(),res=response();await createManagerHistoryHandler({authorize:()=>true,reader:{detail:async()=>({...stay,registrySourceCreatedAt:created})},history:s.history})({method:'GET',query:selected},res);assert.equal(res.body.legacyRecentHistoryRequiredForThisReservation,true);assert.equal(res.body.smsHistoryConclusion,'incomplete_legacy_coverage');}
+});
+test('covered lifetime never clears existing pending claims or enables replay',async()=>{
+ const s=setup({claims:{3:{status:'unknown',at:1}}}),res=response();await createManagerHistoryHandler({authorize:()=>true,reader:{detail:async()=>({...stay,registrySourceCreatedAt:'2026-11-02T20:20:04Z'})},history:s.history})({method:'GET',query:selected},res);assert.equal(res.body.historyCoverage.currentReferenceLifetimeCovered,true);assert.equal(res.body.smsHistoryConclusion,'prior_or_unresolved_attempt');assert.equal(res.body.stages[3].claim.status,'unknown');
+});
+test('negative evidence hash binds exact reservation and is not reusable for another stay',async()=>{
+ const hashes=[];for(const id of ['123','124']){const q={...selected,id},s=setup(),res=response();await createManagerHistoryHandler({authorize:()=>true,reader:{detail:async()=>({...stay,id,registrySourceCreatedAt:'2026-11-02T20:20:04Z'})},history:s.history})({method:'GET',query:q},res);assert.equal(res.code,200);hashes.push(res.body.evidenceHash);}assert.notEqual(hashes[0],hashes[1]);
+});
+test('caller cannot provide a creation timestamp to manufacture lifetime coverage',async()=>{
+ const res=response();await createManagerHistoryHandler({authorize:()=>true,reader:{detail:async()=>{assert.fail('Forbidden query reached source')}}})({method:'GET',query:{...selected,registrySourceCreatedAt:'2026-11-02T20:20:04Z'}},res);assert.equal(res.code,400);
 });
