@@ -1,10 +1,11 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {createCancellationHandler} from '../api/cancellation.js';
+import {createCancellationHandler} from '../lib/cancellation-handler.js';
 import {createPrevioReader} from '../lib/previo-reservations.js';
 import {createGuestLinkHandler} from '../api/guest-link.js';
 import {assertActiveReference,cancellationKey} from '../lib/cancellation-guard.js';
 import {stayKey,passKey} from '../lib/wallet-store.js';
 import registry from '../lib/registry.cjs';
+import {createSessionCookie} from '../api/_wallet-auth.js';
 const q={id:'123',resId:'456',voucher:'fixture',apt:'3',arrival:'2027-01-15',departure:'2027-01-24'};
 const source={...q,hotelId:'763519',statusId:'7',alf:'SYNTHCANCEL',observedAt:'2026-11-04T12:00:00Z'};
 const hash=registry.hash(source.alf),clock=()=>new Date('2026-11-04T12:00:00Z');
@@ -51,4 +52,17 @@ test('no current Wallet record creates no card and says exact scope; wrong PMS n
 test('concurrent cancellation takes only one original Wallet lock',async()=>{const s=fixture(),r=await Promise.all([s.call(),s.call()]);assert.ok(r.some(x=>x.code===409));assert.equal(s.puts(),1);});
 test('anonymous and preview cancellation cannot write',async()=>{
  for(const opt of [{authorize:()=>false},{authorize:()=>true,env:{VERCEL_ENV:'preview'}}]){let calls=0;const h=createCancellationHandler({...opt,store:async()=>{calls++}}),r=response();await h({method:'POST',body:{reservation:q}},r);assert.ok(r.code>=400);assert.equal(calls,0);}
+});
+test('actual existing registry route separates cancellation and preserves cookie authorization',async t=>{
+ const original={...process.env};t.after(()=>{process.env=original});
+ Object.assign(process.env,{HILLSIDE_WALLET_SESSION_SECRET:'synthetic',PREVIO_API_KEY:'synthetic',UPSTASH_REDIS_REST_URL:'https://isolated.invalid',UPSTASH_REDIS_REST_TOKEN:'synthetic'});
+ let reads=0;
+ t.mock.method(globalThis,'fetch',async(url,options)=>{
+  if(url==='https://isolated.invalid'){const c=JSON.parse(options.body);assert.ok(['GET','HVALS'].includes(c[0]));reads++;return {ok:true,json:async()=>({result:c[0]==='HVALS'?[]:null})};}
+  assert.match(String(url),/^https:\/\/api.previo.app\/x1\/hotel\/(get|searchReservations)$/);
+  return {ok:true,text:async()=>String(url).endsWith('/get')?'<hotel><hotId>763519</hotId><isTest>false</isTest></hotel>':'<reservations><reservation><comId>123</comId><resId>456</resId><voucher>fixture</voucher><object><name>Apt3</name></object><term><from>2027-01-15 16:00:00</from><to>2027-01-24 10:00:00</to></term><status><statusId>7</statusId></status><guest><name>Synthetic</name></guest><alfredCode>SYNTHCANCEL</alfredCode></reservation></reservations>'};
+ });
+ const {default:handler}=await import('../api/registry.js?cancel-route-test');
+ const out=response();await handler({method:'GET',query:{operation:'cancellation',...q},headers:{cookie:createSessionCookie().split(';')[0]}},out);assert.equal(out.code,200);assert.equal(out.body.receipt.statusId,'7');assert.equal(out.body.ok,false);assert.ok(reads>0);
+ const denied=response();await handler({method:'POST',query:{operation:'cancellation'},body:{reservation:q},headers:{'x-history-key':'synthetic'}},denied);assert.equal(denied.code,401);
 });

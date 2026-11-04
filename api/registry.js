@@ -1,8 +1,14 @@
 import registry from '../lib/registry.cjs';
 import {createManagerHistoryHandler} from '../lib/manager-history-handler.js';
+import {createCancellationHandler} from '../lib/cancellation-handler.js';
 const {authorized,contextOf,checkContext} = registry;
 const readHistory=createManagerHistoryHandler();
+const cancellation=createCancellationHandler();
 export default async function handler(req,res){
+  if(req.query?.operation==='cancellation'){
+    const {operation,...query}=req.query;
+    return cancellation({...req,query},res);
+  }
   if(req.method==='GET')return readHistory(req,res);
   res.setHeader('Cache-Control','no-store');
   if(!authorized(req))return res.status(401).json({ok:false,error:'Neplatný přístupový klíč historie.'});
