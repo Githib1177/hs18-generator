@@ -15,9 +15,14 @@ test('registry guards actual SMS handler without a real network',async t=>{
    return {ok:true,text:async()=>'<err>0</err><sms_id>12345</sms_id>'};
   }
   assert.equal(url,'https://redis.invalid');if(storageDown)throw new Error('offline');
-  const [op,key,a,b]=JSON.parse(options.body);let result;
+  const c=JSON.parse(options.body),[op,key,a,b]=c;let result;
   if(op==='GET')result=strings.get(key)||null;
   else if(op==='SET'){if(b==='NX'&&strings.has(key))result=null;else{strings.set(key,a);result='OK'}}
+  else if(op==='EVAL'){
+   assert.ok(c[1].includes("redis.call('EXISTS'"));
+   if(strings.has(c[4])||strings.has(c[3]))result=null;
+   else{strings.set(c[3],c[6]);if(!hashes.has(c[5]))hashes.set(c[5],new Map());hashes.get(c[5]).set(c[7],c[8]);result='OK';}
+  }
   else if(op==='HVALS')result=[...(hashes.get(key)||new Map()).values()];
   else if(op==='HSET'||op==='HSETNX'){
    if(!hashes.has(key))hashes.set(key,new Map());let h=hashes.get(key);
@@ -34,6 +39,11 @@ test('registry guards actual SMS handler without a real network',async t=>{
   await call(registryHandler,body());assert.equal(hashes.get(EVENTS).size,1);
  });
  await t.test('read-only check never reserves or sends',async()=>{let r=await call(registryHandler,body('CHECKONLY'));assert.equal(r.code,200);assert.equal(r.data.duplicate,false);assert.equal(r.data.automaticSendEnabled,true);assert.equal(providerCalls,0);assert.ok(!strings.has(contextOf(body('CHECKONLY')).key))});
+ await t.test('cancelled reference blocks every fresh stage at atomic claim without provider call',async()=>{
+  const before=providerCalls,b=body('CANCELLED001');strings.set('hs18:cancellation:v1:'+contextOf(b).stay,'{}');
+  for(const state of ['none','paid','unpaid','done']){const b=body('CANCELLED001',state);assert.equal((await call(handler,b)).code,409);assert.ok(!strings.has(contextOf(b).key));}
+  assert.equal(providerCalls,before);
+ });
  await t.test('manual repeat requires explicit bound confirmation and is single-use',async()=>{
   const b=body();let before=providerCalls;
   let first=await call(handler,b);assert.equal(first.code,409);assert.equal(first.data.allowManualResend,true);assert.equal(before,providerCalls);const token=first.data.manualResendToken;assert.ok(token);

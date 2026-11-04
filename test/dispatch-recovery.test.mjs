@@ -25,6 +25,11 @@ function setup(t){
   if(op==='HVALS')return [...(hashes.get(key)||new Map()).values()];
   if(op==='HSET'||op==='HSETNX'){if(!hashes.has(key))hashes.set(key,new Map());const h=hashes.get(key);if(op==='HSETNX'&&h.has(value))return 0;h.set(value,c[3]);return 1;}
   if(op==='EVAL'){
+   if(c[1].includes("redis.call('EXISTS'")){
+    if(strings.has(c[4])||strings.has(c[3]))return null;
+    strings.set(c[3],c[6]);if(!hashes.has(c[5]))hashes.set(c[5],new Map());hashes.get(c[5]).set(c[7],c[8]);return 'OK';
+   }
+
    if(c[2]===1){if(strings.get(c[3])!==c[4])return 0;strings.delete(c[3]);return 1;}
    if(c[2]===3){if(strings.get(c[3])!==c[6])return 0;const value=c.length>8?c[8]:c[7];if(c.length>8&&strings.get(c[4])!==c[7])return 0;strings.set(c[4],value);strings.set(c[5],value);return 1;}
   }

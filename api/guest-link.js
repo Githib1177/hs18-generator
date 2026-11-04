@@ -1,6 +1,7 @@
 import {randomBytes} from 'node:crypto';
 import {isAuthorized} from './_wallet-auth.js';
 import {redis} from '../lib/wallet-store.js';
+import {assertActiveReference,urlStay} from '../lib/cancellation-guard.js';
 const prefix='hs18:guest-link:';
 const lifetime=180*86400;
 const origin='https://hillside18-guest-portal.vercel.app';
@@ -17,6 +18,7 @@ export function createGuestLinkHandler({store=redis}={}){return async(req,res)=>
   if(!isAuthorized(req))return res.status(401).json({error:'Přihlaste se ke správě Wallet.'});
   let urls;try{urls=Object.fromEntries(['cs','en','de'].map(lang=>[lang,destination(req.body?.urls?.[lang],lang)]));}catch{return res.status(400).json({error:'Odkaz musí vést na portál Hillside se správným stavem pobytu.'});}
   try{
+   for(const url of Object.values(urls)){const stay=urlStay(url);if(stay)await assertActiveReference(store,stay);}
    const supplied=req.body?.id;
    if(supplied!==undefined&&(typeof supplied!=='string'||!/^[A-Za-z0-9_-]{22}$/.test(supplied)))return res.status(400).json({error:'Neplatný identifikátor přípravy odkazu.'});
    const id=supplied||randomBytes(16).toString('base64url');
@@ -33,7 +35,7 @@ export function createGuestLinkHandler({store=redis}={}){return async(req,res)=>
  if(typeof id!=='string'||! /^[A-Za-z0-9_-]{22}$/.test(id)||!['cs','en','de'].includes(lang))return res.status(404).end('Odkaz nebyl nalezen.');
  try{
   const raw=await store(['GET',prefix+id]);if(!raw)return res.status(404).end('Odkaz již není dostupný. Kontaktujte prosím recepci.');
-  const url=destination(JSON.parse(raw)[lang],lang);res.setHeader('Location',url);return res.status(302).end();
+  const url=destination(JSON.parse(raw)[lang],lang),stay=urlStay(url);if(stay)await assertActiveReference(store,stay);res.setHeader('Location',url);return res.status(302).end();
  }catch{return res.status(503).end('Portál je dočasně nedostupný. Zkuste to prosím znovu.');}
 };}
 export default createGuestLinkHandler();

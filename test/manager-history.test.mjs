@@ -67,8 +67,8 @@ test('actual existing registry GET route authorizes with original cookie and cal
  });
  const {default:handler}=await import('../api/registry.js?manager-history-route-test');
  const res=response();await handler({method:'GET',query:selected,headers:{cookie:createSessionCookie().split(';')[0]}},res);
- assert.equal(res.code,200);assert.equal(res.body.readOnly,true);assert.equal(pms,4);assert.equal(reads,6);assert.doesNotMatch(JSON.stringify(res.body),/SYNTHETIC001|Synthetic Guest/);
- const blocked=response();await handler({method:'GET',query:selected,headers:{'x-history-key':'old-key-without-session'}},blocked);assert.equal(blocked.code,401);assert.equal(pms,4);assert.equal(reads,6);
+ assert.equal(res.code,200);assert.equal(res.body.readOnly,true);assert.equal(pms,2);assert.equal(reads,6);assert.doesNotMatch(JSON.stringify(res.body),/SYNTHETIC001|Synthetic Guest/);
+ const blocked=response();await handler({method:'GET',query:selected,headers:{'x-history-key':'old-key-without-session'}},blocked);assert.equal(blocked.code,401);assert.equal(pms,2);assert.equal(reads,6);
 });
 test('coverage uses trusted PMS creation time and verified prior production date, not infinite pre-creation history',()=>{
  assert.equal(historyCoverage('2026-11-02T20:20:04Z','2026-11-03T09:00:00Z').currentReferenceLifetimeCovered,true);

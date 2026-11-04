@@ -5,6 +5,7 @@ import {createPrevioReader} from '../lib/previo-reservations.js';
 import {alfredDetails,buildWalletObject} from '../lib/wallet-pass.js';
 import {guestToken} from '../lib/wallet-guest-token.js';
 import {redis,stayKey,passKey,lockKey} from '../lib/wallet-store.js';
+import {assertActiveReference} from '../lib/cancellation-guard.js';
 const commitScript="if redis.call('GET',KEYS[1])~=ARGV[1] then return 0 end redis.call('SET',KEYS[2],ARGV[2]);redis.call('SET',KEYS[3],ARGV[2]);return 1";
 export function createWalletHandler({store=redis,getConfig=walletConfig,putObject=putWalletObject,getObject=getWalletObject,makeSaveUrl=walletSaveUrl,reader=createPrevioReader()}={}){return async(req,res)=>{
  res.setHeader('Cache-Control','no-store');
@@ -26,6 +27,7 @@ export function createWalletHandler({store=redis,getConfig=walletConfig,putObjec
   if(!automatic&&body.checkinComplete&&body.paymentComplete&&(!body.accessConfirmed||!/^\d{4}$/.test(body.doorCode||'')))return res.status(400).json({error:'Potvrďte správný čtyřmístný kód dveří.'});
   hash=createHash('sha256').update(alf.code).digest('hex');claim=randomUUID();
   if(await store(['SET',lockKey(hash),claim,'NX','PX',120000])!=='OK'){claim=null;return res.status(409).json({error:'Karta se právě aktualizuje. Zkuste to za chvíli.'});}
+  await assertActiveReference(store,hash);
   const raw=await store(['GET',stayKey(hash)]),previous=raw?JSON.parse(raw):null;
   if(automatic&&previous&&(previous.busyUntil>now||!['ready','pending'].includes(previous.state)))return res.status(409).json({error:'Výsledek předchozí aktualizace karty není ověřený. Nevytvářím další pokus.'});
   const existing=body.action==='sync-existing';

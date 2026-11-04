@@ -9,6 +9,7 @@ import {alfredDetails} from '../lib/wallet-pass.js';
 import {walletConfig,getWalletObject} from '../lib/google-wallet.js';
 import {redis,passKey,lockKey} from '../lib/wallet-store.js';
 import {digest,shortId,shortUrls,targets,recoverPreparation} from '../lib/dispatch-preparation.js';
+import {assertActiveReference} from '../lib/cancellation-guard.js';
 
 const prefix='hs18:manager-dispatch:v1:',lifetime=180*86400;
 const uuid=id=>typeof id==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id);
@@ -51,6 +52,7 @@ export function createManagerDispatchHandler({store=redis,walletHandler=wallet,l
    if(b.action==='prepare'){
     if(b.operatorConfirmed!==true)return res.status(400).json({error:'Chybí potvrzení ověřených podkladů manažerem.'});
     let input;try{input=intended(b);}catch(e){return res.status(400).json({error:e.message});}
+    await assertActiveReference(store,input.stayHash);
     const id=b.preparationId===undefined?randomUUID():b.preparationId;if(!uuid(id))return res.status(400).json({error:'Neplatné stabilní ID přípravy.'});
     await hold(prefix+id+':prepare-lock');
     const oldRaw=await store(['GET',prefix+id]);let record=oldRaw?JSON.parse(oldRaw):null;
@@ -77,7 +79,9 @@ export function createManagerDispatchHandler({store=redis,walletHandler=wallet,l
    }
    if(!['send','retry','owner-send','status','reconcile','reconcile-prepare'].includes(b.action)||!uuid(b.id))return res.status(400).json({error:'Neplatná operace.'});
    const raw=await store(['GET',prefix+b.id]);if(!raw)return res.status(404).json({error:'Příprava nebyla nalezena.'});
-   let record=await recover(JSON.parse(raw),b.action==='reconcile-prepare');
+   const original=JSON.parse(raw);
+   if(['send','retry','owner-send','reconcile-prepare'].includes(b.action))await assertActiveReference(store,registry.contextOf({context:original.context}).stay);
+   let record=await recover(original,b.action==='reconcile-prepare');
    if(b.action==='reconcile-prepare'){
     if(record.phase==='prepared'||record.phase==='wallet_ready'){await save(record);return res.status(200).json(record.phase==='prepared'?prepared(record):{ok:false,status:'wallet_ready_link_missing',id:record.id,recovery:record.recovery});}
     return res.status(202).json({ok:false,status:'preparation_unknown',id:record.id,recovery:record.recovery});
