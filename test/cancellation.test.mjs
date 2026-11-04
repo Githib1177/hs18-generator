@@ -1,4 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
+import {IncomingMessage} from 'node:http';import {Socket} from 'node:net';
 import {createCancellationHandler} from '../lib/cancellation-handler.js';
 import {createPrevioReader} from '../lib/previo-reservations.js';
 import {createGuestLinkHandler} from '../api/guest-link.js';
@@ -63,6 +64,9 @@ test('actual existing registry route separates cancellation and preserves cookie
   return {ok:true,text:async()=>String(url).endsWith('/get')?'<hotel><hotId>763519</hotId><isTest>false</isTest></hotel>':'<reservations><reservation><comId>123</comId><resId>456</resId><voucher>fixture</voucher><object><name>Apt3</name></object><term><from>2027-01-15 16:00:00</from><to>2027-01-24 10:00:00</to></term><status><statusId>7</statusId></status><guest><name>Synthetic</name></guest><alfredCode>SYNTHCANCEL</alfredCode></reservation></reservations>'};
  });
  const {default:handler}=await import('../api/registry.js?cancel-route-test');
- const out=response();await handler({method:'GET',query:{operation:'cancellation',...q},headers:{cookie:createSessionCookie().split(';')[0]}},out);assert.equal(out.code,200);assert.equal(out.body.receipt.statusId,'7');assert.equal(out.body.ok,false);assert.ok(reads>0);
+ for(const req of [{},new IncomingMessage(new Socket())]){
+  req.method='GET';req.query={operation:'cancellation',...q};req.headers={cookie:createSessionCookie().split(';')[0]};
+  const out=response();await handler(req,out);assert.equal(out.code,200);assert.equal(out.body.receipt.statusId,'7');assert.equal(out.body.ok,false);assert.ok(reads>0);
+ }
  const denied=response();await handler({method:'POST',query:{operation:'cancellation'},body:{reservation:q},headers:{'x-history-key':'synthetic'}},denied);assert.equal(denied.code,401);
 });

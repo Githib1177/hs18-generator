@@ -7,7 +7,7 @@ const cancellation=createCancellationHandler();
 export default async function handler(req,res){
   if(req.query?.operation==='cancellation'){
     const {operation,...query}=req.query;
-    return cancellation({...req,query},res);
+    return cancellation(req,res,query);
   }
   if(req.method==='GET')return readHistory(req,res);
   res.setHeader('Cache-Control','no-store');
