@@ -7,6 +7,11 @@ export function createReservationsHandler({reader=createPrevioReader(),authorize
  if(!authorize(req))return res.status(401).json({error:'Pro vyhledávání se přihlaste do Messengeru.'});
  const q=req.query||{};
  try{
+  if(q.mode==='uptake'){
+   const keys=['mode','id','resId','arrival','departure','voucher','apt'];
+   if(Object.keys(q).some(k=>!keys.includes(k))||keys.some(k=>!Object.hasOwn(q,k)||typeof q[k]!=='string'||!q[k]||q[k].length>80)||!['1','2','3'].includes(q.apt)||!/^\d{4}-\d{2}-\d{2}$/.test(q.arrival)||!/^\d{4}-\d{2}-\d{2}$/.test(q.departure)||!/^[1-9]\d{0,14}$/.test(q.id)||!/^[1-9]\d{0,14}$/.test(q.resId))return res.status(400).json({error:'Úplná přesná identita pobytu je povinná.'});
+   return res.status(200).json({ok:true,item:await reader.uptake(q)});
+  }
   if(q.mode==='detail'){
    if(['id','resId','arrival','departure','voucher','apt'].some(k=>typeof q[k]!=='string'))return res.status(400).json({error:'Vyberte rezervaci z nabídky.'});
    return res.status(200).json({ok:true,item:await reader.detail(q)});
