@@ -4,19 +4,33 @@ import {apiKey,createPrevioReader,dateWindows,parseXml,onlineCheckin,guestPaymen
 import {createReservationsHandler} from '../api/reservations.js';
 const clock=()=>new Date('2026-11-02T12:00:00Z');
 const room=(extra='')=>'<reservation><comId>123</comId><resId>456</resId><voucher>1234567890</voucher><term><from>2027-01-15 14:00:00</from><to>2027-01-20 10:00:00</to></term><status><statusId>2</statusId></status><object><name>Apt3</name></object><guest><gueId>7</gueId><firstName>Žaneta</firstName><lastName>Nováková</lastName><phone>+420777000001</phone></guest><alfredCode>SYNTH01</alfredCode><lanId>3</lanId><note>Must never be exported</note>'+extra+'</reservation>';
-function setup({restDenied=false,changeRoom=false}={}){
+function setup({restDenied=false,changeRoom=false,note,now=clock}={}){
  const calls=[],booking={resId:456,hotId:763519,voucher:'1234567890',requirePayment:true,commissions:[{comId:123,cosId:2,termFrom:'2027-01-15T14:00:00',termTo:'2027-01-20T10:00:00',completeCheckin:true,guests:[{gueId:7,hasCompleteInfo:true}]}]};
  const acct={resId:456,groupAccount:{total:1250,paid:1250,needPay:false,items:[{coaId:1,comId:123,owner:{type:'guest',id:7},price:1250,paid:1250,count:1}]}};
- const reader=createPrevioReader({env:{PREVIO_API_KEY:'synthetic'},now:clock,fetcher:async(url,options)=>{
+ const reader=createPrevioReader({env:{PREVIO_API_KEY:'synthetic'},now,fetcher:async(url,options)=>{
   calls.push({url,options});let raw;
   if(url.includes('/rest/')){assert.equal(options.headers['X-Previo-Hotel-Id'],'763519');assert.equal(options.headers['X-Previo-Language-ID'],'1');assert.equal(options.headers.Authorization,'ApiKey synthetic');return {ok:!restDenied,status:restDenied?403:200,text:async()=>JSON.stringify(url.includes('/account?')?acct:booking)};}
   assert.equal(options.method,'POST');assert.equal(options.redirect,'error');assert.equal(options.headers.Authorization,'ApiKey synthetic');
   if(url.endsWith('/get'))raw='<hotel><hotId>763519</hotId><isTest>false</isTest></hotel>';
-  else{assert.ok(url.endsWith('/searchReservations'));raw='<reservations>'+room().replace('Apt3',changeRoom?'Apt2':'Apt3')+'</reservations>';}
+  else{assert.ok(url.endsWith('/searchReservations'));raw='<reservations>'+room().replace('Apt3',changeRoom?'Apt2':'Apt3').replace('Must never be exported',note||'Must never be exported')+'</reservations>';}
   return {ok:true,status:200,text:async()=>raw};
  }});return {reader,calls,booking,acct};
 }
 const selected={id:'123',resId:'456',voucher:'1234567890',apt:'3',arrival:'2027-01-15',departure:'2027-01-20'};
+
+test('only verified access, complete check-in and settled guest debt release PIN before arrival',async()=>{
+ const note='Kód - 0258 HS18ACCESSV2 COM 123 APT 3 FROM 20270115140000 TO 20270120100000 VERIFIED APARTMENT SKIROOM CODE 0258 ENDHS18ACCESS';
+ const source=setup({note});
+ source.acct.groupAccount.items.push({comId:123,owner:{type:'ota',id:100},price:120,paid:0,count:1});
+ assert.equal((await source.reader.detail(selected)).accessCode,'0258');
+ source.booking.commissions[0].completeCheckin=false;
+ assert.equal((await source.reader.detail(selected)).accessCode,'');
+ source.booking.commissions[0].completeCheckin=true;
+ source.acct.groupAccount.items[0].paid=0;
+ assert.equal((await source.reader.detail(selected)).accessCode,'');
+ assert.equal((await setup({note:note.replace('COM 123','COM 999')}).reader.detail(selected)).accessCode,'');
+ assert.equal((await setup({note,now:()=>new Date('2027-01-20T09:00:00Z')}).reader.detail(selected)).accessCode,'');
+});
 
 test('registry creation metadata is explicit opt-in; ordinary lookup and Wallet inputs keep their original shape',async()=>{
  const reader=createPrevioReader({env:{PREVIO_API_KEY:'synthetic'},now:clock,fetcher:async url=>{

@@ -17,7 +17,8 @@ test('all booking states, apartments and languages show apartment, support and f
   const body={alfred:'DEMOHS',apartment,doorCode:'0258',checkinComplete,paymentComplete,accessConfirmed:true,lang};
   const {object,state}=buildWalletObject(stay,body,config,now);assert.equal(state,checkinComplete&&paymentComplete?'ready':'pending');
   assert.equal(JSON.stringify(object).includes('0258'),state==='ready');assert.equal(object.header.defaultValue.value,state==='ready'?'0258':apartment);assert.equal(object.textModulesData.find(x=>x.id==='alfred').body,'https://alfred.previo.app/login/DEMOHS');assert.equal(object.textModulesData.find(x=>x.id==='support').body,'+420 731 990 087');assert.ok(object.linksModuleData.uris.some(x=>x.id==='contact'&&x.uri.endsWith('/hillside-support.vcf')));assert.equal(object.textModulesData.find(x=>x.id==='apartment').body,apartment);
-  for(const time of [now-2000,now+86400000])assert.ok(!JSON.stringify(buildWalletObject(stay,body,config,time).object).includes('0258'));
+  assert.equal(JSON.stringify(buildWalletObject(stay,body,config,now-2000).object).includes('0258'),state==='ready');
+  assert.ok(!JSON.stringify(buildWalletObject(stay,body,config,now+86400000).object).includes('0258'));
  }
 });
 function fakeStore(){const values=new Map();return {values,call:async c=>{if(c[0]==='GET')return values.get(c[1])||null;if(c[0]==='SET'){if(c.includes('NX')&&values.has(c[1]))return null;values.set(c[1],c[2]);return 'OK';}if(c[0]==='EVAL'){if(c[2]===1){if(values.get(c[3])===c[4]){values.delete(c[3]);return 1;}return 0;}if(values.get(c[3])!==c[6])return 0;values.set(c[4],c[7]);values.set(c[5],c[7]);return 1;}throw new Error('Unexpected store command');}};}

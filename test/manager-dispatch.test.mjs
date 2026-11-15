@@ -66,7 +66,7 @@ test('real prepare, Wallet, immutable redirect, registry, SMS and history flow f
 test('authentication, preview, missing dates, future release and Google failure block all SMS',async t=>{
  const s=setup(t);assert.equal((await s.call(s.prepare(),false)).code,401);assert.equal(s.objects.length,0);
  process.env.VERCEL_ENV='preview';assert.equal((await s.call(s.prepare())).code,403);process.env.VERCEL_ENV='production';
- for(const change of [{expiresAt:null},{operatorConfirmed:false},{accessConfirmed:false},{state:'bad'},{releaseAt:new Date(Date.now()+60000).toISOString()}])assert.ok((await s.call({...s.prepare(),...change})).code>=400);
+ for(const change of [{expiresAt:null},{operatorConfirmed:false},{accessConfirmed:false},{state:'bad'},{releaseAt:new Date(Date.now()+4*86400000).toISOString()}])assert.ok((await s.call({...s.prepare(),...change})).code>=400);
  s.setGoogleDown(true);assert.equal((await s.call(s.prepare())).code,503);assert.equal(s.sends(),0);assert.ok(![...s.strings.keys()].some(k=>k.startsWith('hs18:guest-link:')));
 });
 test('concurrent send and restart do not duplicate; history failure is repaired without sending again',async t=>{

@@ -71,15 +71,15 @@ test('private override without catalog hash applies only to its exact stay',asyn
 
 test('uptake still returns no guest code inside the eligible time window',async()=>{assertRedacted(await setup({now:'2027-01-25T14:00:00Z'}).reader.uptake(exact));});
 test('uptake metadata does not depend on calling account/checkin/Wallet or registry',async()=>{const s=setup({restDenied:true});assert.equal((await s.reader.uptake(exact)).marker.validV2,true);assert.equal(s.calls.length,2);});
-test('detail before approved 15h retains all gates and keeps code hidden',async()=>{const d=await setup({now:'2027-01-25T13:59:59Z'}).reader.detail(exact);assert.equal(d.accessCode,'');assert.equal(d.releaseAt,'2027-01-25T14:00:00.000Z');assert.equal(d.rawPmsFrom,'2027-01-25T16:00:00');});
+test('detail releases verified code before approved arrival while preserving the exact stay times',async()=>{const d=await setup({now:'2027-01-25T13:59:59Z'}).reader.detail(exact);assert.equal(d.accessCode,SYNTHETIC_CODE);assert.equal(d.releaseAt,'2027-01-25T14:00:00.000Z');assert.equal(d.rawPmsFrom,'2027-01-25T16:00:00');});
 test('detail after approved 15h reveals synthetic code only with paid completed registration',async()=>{const d=await setup({now:'2027-01-25T14:00:00Z'}).reader.detail(exact);assert.equal(d.accessCode,SYNTHETIC_CODE);assert.equal(d.accessConfirmed,true);});
 test('approved arrival never bypasses incomplete checkin',async()=>{assert.equal((await setup({now:'2027-01-25T14:00:00Z',checkin:false}).reader.detail(exact)).accessCode,'');});
 test('approved arrival never bypasses guest debt',async()=>{assert.equal((await setup({now:'2027-01-25T14:00:00Z',paid:false}).reader.detail(exact)).accessCode,'');});
 test('approved arrival never bypasses unknown REST state',async()=>{const d=await setup({now:'2027-01-25T14:00:00Z',restDenied:true}).reader.detail(exact);assert.equal(d.accessCode,'');assert.equal(d.checkinComplete,null);});
 test('detail closes code at original departure exactly',async()=>{assert.equal((await setup({now:'2027-01-29T09:00:00Z'}).reader.detail(exact)).accessCode,'');});
-test('ordinary stay keeps original 16h release without owner decision',async()=>{
+test('ordinary stay keeps original 16h arrival without delaying verified access code',async()=>{
  const q={...exact,voucher:'SYNTHETIC-OTHER'},s=setup({selected:q,note:makeNote(q,{from:q.arrival+'T16:00:00'}),now:'2027-01-25T14:00:00Z'}),d=await s.reader.detail(q);
- assert.equal(d.accessCode,'');assert.equal(d.releaseAt,'2027-01-25T15:00:00.000Z');assert.equal(Object.hasOwn(d,'ownerArrival'),false);assert.equal(Object.hasOwn(d,'rawPmsFrom'),false);
+ assert.equal(d.accessCode,SYNTHETIC_CODE);assert.equal(d.releaseAt,'2027-01-25T15:00:00.000Z');assert.equal(Object.hasOwn(d,'ownerArrival'),false);assert.equal(Object.hasOwn(d,'rawPmsFrom'),false);
  const u=await s.reader.uptake(q);assert.equal(u.marker.validV2,true);assert.equal(u.term.effectiveFrom,'2027-01-25T16:00:00');
 });
 test('ordinary stay may release at original 16h with all original gates',async()=>{const q={...exact,voucher:'SYNTHETIC-OTHER'};assert.equal((await setup({selected:q,note:makeNote(q,{from:q.arrival+'T16:00:00'}),now:'2027-01-25T15:00:00Z'}).reader.detail(q)).accessCode,SYNTHETIC_CODE);});

@@ -34,14 +34,9 @@ export function createWalletHandler({store=redis,getConfig=walletConfig,putObjec
   if(existing&&!previous)return res.status(200).json({skipped:true,reason:'no-card'});
   const expiresAt=existing?previous.expiresAt:Date.parse(body.expiresAt),releaseAt=existing?previous.releaseAt:Date.parse(body.releaseAt);
   if(!Number.isFinite(expiresAt)||!Number.isFinite(releaseAt)||releaseAt>=expiresAt||expiresAt<=now||expiresAt>now+366*86400000)return res.status(400).json({error:'Zadejte platný začátek přístupu a konec pobytu v části Wallet.'});
-  if(!automatic&&body.checkinComplete&&body.paymentComplete&&releaseAt>now)return res.status(409).json({error:'Čas přístupu ještě nenastal. Vyčkejte, nebo opravte čas v části Wallet.'});
   const startsAt=existing?previous.startsAt:(body.startsAt?Date.parse(body.startsAt):previous?.startsAt);
   if(startsAt!==undefined&&(!Number.isFinite(startsAt)||startsAt>=expiresAt))return res.status(400).json({error:'Neplatný začátek pobytu.'});
   const stay={passId:previous?.passId||randomUUID(),expiresAt,releaseAt,...(startsAt!==undefined?{startsAt}:{})};
-  if(automatic&&!body.accessConfirmed&&previous?.state==='ready'&&body.checkinComplete&&body.paymentComplete&&releaseAt<=now&&previous.startsAt===startsAt&&previous.expiresAt===expiresAt){
-   const saved=await getObject(config.issuerId+'.'+stay.passId,config),code=saved?.textModulesData?.find(x=>x.id==='door')?.body,apartment=saved?.textModulesData?.find(x=>x.id==='apartment')?.body;
-   if(!/^\d{4}$/.test(code||'')||apartment!==body.apartment)throw Error('Google nepotvrdil dosavadní ověřené přístupy.');body.doorCode=code;body.accessConfirmed=true;
-  }
   const {object,state}=buildWalletObject(stay,body,config,now);
   const revision=createHash('sha256').update(JSON.stringify(object)).digest('hex');
   const record={...stay,revision,state:null,busyUntil:now+120000};
