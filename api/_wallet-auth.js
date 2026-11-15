@@ -1,3 +1,4 @@
+import {isAuthenticatedManager} from '../lib/hall3000-manager-auth.js';
 import crypto from 'node:crypto';
 
 const COOKIE = 'hillside_wallet_session';
@@ -27,6 +28,8 @@ export function clearSessionCookie() {
 }
 
 export function isAuthorized(req) {
+  // Only the manager endpoint can issue this in-process authorization.
+  if (isAuthenticatedManager(req)) return true;
   if (!secret()) return false;
   const cookies = Object.fromEntries(String(req.headers.cookie || '').split(';').map(v => v.trim().split('=')));
   const [expires, sig] = String(cookies[COOKIE] || '').split('.');

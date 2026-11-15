@@ -1,3 +1,7 @@
+import {authenticateManager} from '../lib/hall3000-manager-auth.js';
+import {createCancellationHandler} from '../lib/cancellation-handler.js';
+import {createManagerHistoryHandler} from '../lib/manager-history-handler.js';
+import {createPrevioReader} from '../lib/previo-reservations.js';
 import {randomUUID} from 'node:crypto';
 import {isAuthorized} from './_wallet-auth.js';
 import wallet from './wallet.js';
@@ -137,4 +141,42 @@ export function createManagerDispatchHandler({store=redis,walletHandler=wallet,l
   finally{for(const {key,claim} of locks.reverse())try{await store(['EVAL',"if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('DEL',KEYS[1]) end return 0",1,key,claim]);}catch{}}
  };
 }
-export default createManagerDispatchHandler();
+const managerActions = new Set(['prepare','send','retry','owner-send','status','reconcile','reconcile-prepare','cancel','cancellation-status','history','probe']);
+
+export function createEndpoint({
+ dispatch = createManagerDispatchHandler(),
+ cancellation = createCancellationHandler(),
+ historyRead = createManagerHistoryHandler(),
+ reader = createPrevioReader(),
+ env=process.env
+}={}){
+ return async function handler(req,res) {
+ if(req.method !== 'POST' || !Object.hasOwn(req.body || {}, 'signature')) return dispatch(req,res);
+ res.setHeader('Cache-Control','no-store');
+ const manager = authenticateManager(req,env.HILLSIDE_MANAGER_DISPATCH_PUBLIC_KEY);
+ if(!manager) return res.status(401).json({ok:false,reason:'manager_authentication_required'});
+ const action = manager.body.action;
+ if(!managerActions.has(action)) return res.status(400).json({ok:false,reason:'unsupported_manager_operation'});
+ if(action === 'probe') return res.status(200).json({ok:true,status:'ready',deployment:env.VERCEL_GIT_COMMIT_SHA||null});
+ if(action === 'history') return historyRead({...manager,method:'GET',query:manager.body.reservation},res);
+ if(action === 'cancellation-status') return cancellation({...manager,method:'GET'},res,manager.body.reservation);
+ if(action === 'cancel') return cancellation(manager,res);
+ if(action === 'prepare'){
+  const b=manager.body;
+  try{
+   const stay=await reader.detail(b.reservation||{});
+   if(typeof stay.checkinComplete!=='boolean'||typeof stay.paymentComplete!=='boolean')throw Error('Unknown state');
+   const state=stay.checkinComplete?(stay.paymentComplete?'done':'unpaid'):(stay.paymentComplete?'paid':'none');
+   if(stay.alf!==alfredDetails(b.alf).code || stay.apt!==String(b.apt) || state!==b.state ||
+      Date.parse(stay.startsAt)!==Date.parse(b.startsAt) || Date.parse(stay.expiresAt)!==Date.parse(b.expiresAt) ||
+      Date.parse(stay.releaseAt)!==Date.parse(b.releaseAt) ||
+      (state==='done' && (stay.accessConfirmed!==true || stay.accessCode!==b.door)))throw Error('Current stay differs');
+   manager.body.guestName=stay.guestName;
+  }catch{
+   return res.status(409).json({ok:false,reason:'current_reservation_not_confirmed'});
+  }
+ }
+ return dispatch(manager,res);
+ };
+}
+export default createEndpoint();
