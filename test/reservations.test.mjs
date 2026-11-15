@@ -26,6 +26,7 @@ test('only verified access, complete check-in and settled guest debt release PIN
  source.booking.commissions[0].completeCheckin=false;
  assert.equal((await source.reader.detail(selected)).accessCode,'');
  source.booking.commissions[0].completeCheckin=true;
+ source.acct.groupAccount.needPay=true;
  source.acct.groupAccount.items[0].paid=0;
  assert.equal((await source.reader.detail(selected)).accessCode,'');
  assert.equal((await setup({note:note.replace('COM 123','COM 999')}).reader.detail(selected)).accessCode,'');
@@ -77,6 +78,19 @@ test('only complete online registration of all guests gives checked-in flag',()=
  assert.equal(onlineCheckin({completeCheckin:true,guests:[{hasCompleteInfo:true},{hasCompleteInfo:false}]}),false);
  assert.equal(onlineCheckin({cosId:3,guests:[{hasCompleteInfo:true}]}),null);
  assert.equal(onlineCheckin({completeCheckin:true,guests:[]}),null);
+ assert.equal(onlineCheckin({completeCheckin:true,guests:[{checkInSteps:{hasCompleteInfo:true}}]}),true);
+ assert.equal(onlineCheckin({completeCheckin:true,guests:[{hasCompleteInfo:false,checkInSteps:{hasCompleteInfo:true}}]}),null);
+ assert.equal(onlineCheckin({completeCheckin:true,guests:[{checkInSteps:{hasCompleteInfo:true}},{checkInSteps:{hasCompleteInfo:false}}]}),false);
+});
+test('needPay=false settles the account, and only CZK supports the one-crown fallback',()=>{
+ const s=setup(),g=s.acct.groupAccount;
+ Object.assign(g,{curId:1,needPay:false});
+ g.items[0].paid=0;g.items[0].price=1;
+ assert.equal(guestPayment(s.acct,s.booking),true);
+ delete g.needPay;
+ assert.equal(guestPayment(s.acct,s.booking),true);
+ g.items[0].price=1.01;assert.equal(guestPayment(s.acct,s.booking),false);
+ g.items[0].price=1;g.curId=2;assert.equal(guestPayment(s.acct,s.booking),false);
 });
 test('OTA balance does not become guest debt, guest dog charge remains due',()=>{
  const s=setup();s.acct.groupAccount.total=11250;s.acct.groupAccount.paid=1250;s.acct.groupAccount.needPay=true;s.acct.groupAccount.items.push({comId:123,owner:{type:'ota',id:100},price:10000,paid:0,count:1});assert.equal(guestPayment(s.acct,s.booking),true);
@@ -84,10 +98,10 @@ test('OTA balance does not become guest debt, guest dog charge remains due',()=>
 });
 test('unassigned items count as non-OTA, missing payment stays unknown',()=>{const s=setup();s.acct.groupAccount.needPay=true;delete s.acct.groupAccount.items[0].owner;assert.equal(guestPayment(s.acct,s.booking),true);s.acct.groupAccount.items[0].paid=0;assert.equal(guestPayment(s.acct,s.booking),false);delete s.acct.groupAccount.items[0].paid;assert.equal(guestPayment(s.acct,s.booking),null)});
 test('wrong reservation or unknown guest/room makes payment unknown',()=>{const s=setup();s.acct.resId=999;assert.equal(guestPayment(s.acct,s.booking),null);s.acct.resId=456;s.acct.groupAccount.items[0].comId=999;assert.equal(guestPayment(s.acct,s.booking),null)});
-test('explicit empty zero account has no debt; missing totals do not prove settlement',()=>{const s=setup();s.acct.groupAccount.items=[];s.acct.groupAccount.total=0;s.acct.groupAccount.paid=0;assert.equal(guestPayment(s.acct,s.booking),true);delete s.acct.groupAccount.total;assert.equal(guestPayment(s.acct,s.booking),null)});
-test('company debt counts and OTA overpayment cannot cancel it',()=>{const s=setup();s.acct.groupAccount.items[0].owner={type:'company',id:77};s.acct.groupAccount.items[0].paid=0;s.acct.groupAccount.items.push({comId:123,owner:{type:'OTA',id:1},price:100,paid:10000,count:1});assert.equal(guestPayment(s.acct,s.booking),false);s.acct.groupAccount.items[0].paid=1250;assert.equal(guestPayment(s.acct,s.booking),true)});
+test('explicit settlement covers a zero account; missing needPay does not prove settlement',()=>{const s=setup();s.acct.groupAccount.items=[];s.acct.groupAccount.total=0;s.acct.groupAccount.paid=0;assert.equal(guestPayment(s.acct,s.booking),true);delete s.acct.groupAccount.needPay;delete s.acct.groupAccount.total;assert.equal(guestPayment(s.acct,s.booking),null)});
+test('company debt counts and OTA overpayment cannot cancel it',()=>{const s=setup();s.acct.groupAccount.needPay=true;s.acct.groupAccount.items[0].owner={type:'company',id:77};s.acct.groupAccount.items[0].paid=0;s.acct.groupAccount.items.push({comId:123,owner:{type:'OTA',id:1},price:100,paid:10000,count:1});assert.equal(guestPayment(s.acct,s.booking),false);s.acct.groupAccount.items[0].paid=1250;assert.equal(guestPayment(s.acct,s.booking),true)});
 test('OTA-only debt is settled for the guest even when group needPay is true',()=>{const s=setup();s.acct.groupAccount.items[0].owner={type:'ota',id:1};s.acct.groupAccount.items[0].paid=0;s.acct.groupAccount.needPay=true;assert.equal(guestPayment(s.acct,s.booking),true)});
-test('one non-OTA owner credit does not erase another owner debt',()=>{const s=setup();s.acct.groupAccount.items[0].paid=2500;s.acct.groupAccount.items.push({comId:123,owner:{type:'company',id:77},price:1250,paid:0,count:1});assert.equal(guestPayment(s.acct,s.booking),false)});
+test('one non-OTA owner credit does not erase another owner debt',()=>{const s=setup();s.acct.groupAccount.needPay=true;s.acct.groupAccount.items[0].paid=2500;s.acct.groupAccount.items.push({comId:123,owner:{type:'company',id:77},price:1250,paid:0,count:1});assert.equal(guestPayment(s.acct,s.booking),false)});
 test('sealed server credential decrypts only with correct existing server secret',()=>{
  const env={HILLSIDE_WALLET_SESSION_SECRET:'synthetic-server-secret'},nonce=Buffer.alloc(12,7),key=createHash('sha256').update('hs18-previo-api-v1:'+env.HILLSIDE_WALLET_SESSION_SECRET).digest(),c=createCipheriv('aes-256-gcm',key,nonce);c.setAAD(Buffer.from('hotel763519'));const data=Buffer.concat([c.update('synthetic-api-key'),c.final()]);env.PREVIO_API_KEY_SEALED='v1.'+nonce.toString('base64url')+'.'+data.toString('base64url')+'.'+c.getAuthTag().toString('base64url');assert.equal(apiKey(env),'synthetic-api-key');assert.throws(()=>apiKey({...env,HILLSIDE_WALLET_SESSION_SECRET:'other'}));
 });
