@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createPrevioReader,accessMarker} from '../lib/previo-reservations.js';
 import {createReservationsHandler} from '../api/reservations.js';
-import {OWNER_ARRIVAL_DECISIONS,OWNER_ARRIVAL_SOURCE} from '../lib/owner-arrival-decisions.js';
+import {OWNER_ARRIVAL_DECISIONS} from '../lib/owner-arrival-decisions.js';
 
 // All HTTP bodies, contacts and codes here are synthetic. Only the approved
 // identity scope is copied from the source-bound server allowlist.
@@ -10,12 +10,14 @@ const owner=OWNER_ARRIVAL_DECISIONS[0];
 const exact={id:owner.com_id,resId:owner.res_id,voucher:owner.voucher,apt:owner.apartment,arrival:owner.arrival,departure:owner.departure};
 const SYNTHETIC_CODE='0472',SYNTHETIC_PHONE='+420777000009',SYNTHETIC_ALF='SYNTHONLY';
 const makeNote=(q=exact,{from=q.arrival+'T15:00:00',to=q.departure+'T10:00:00',code=SYNTHETIC_CODE,com=q.id,apt=q.apt,heading=code}={})=>'<p>Kód - <b><u>'+heading+'</u></b></p><p>HS18ACCESSV2 COM '+com+' APT '+apt+' FROM '+from.replace(/\D/g,'')+' TO '+to.replace(/\D/g,'')+' VERIFIED APARTMENT SKIROOM CODE '+code+' ENDHS18ACCESS</p>';
-function setup({selected=exact,note=makeNote(selected),now='2026-11-06T02:00:00Z',ownerDecisions=OWNER_ARRIVAL_DECISIONS,roomCount=1,hotel='763519',status='2',rawFrom=selected.arrival+' 16:00:00',rawTo=selected.departure+' 10:00:00',checkin=true,paid=true,restDenied=false,sourceMismatch={}}={}){
+function setup({selected=exact,note=makeNote(selected),now='2026-11-06T02:00:00Z',ownerDecisions=OWNER_ARRIVAL_DECISIONS,roomCount=1,hotel='763519',status='2',rawFrom=selected.arrival+' 16:00:00',rawTo=selected.departure+' 10:00:00',checkin=true,paid=true,restDenied=false,sourceMismatch={},override}={}){
  const calls=[],q={...selected,...sourceMismatch};
  const room='<reservation><comId>'+q.id+'</comId><resId>'+q.resId+'</resId><voucher>'+q.voucher+'</voucher><term><from>'+rawFrom+'</from><to>'+rawTo+'</to></term><status><statusId>'+status+'</statusId></status><object><name>Apt'+q.apt+'</name></object><guest><gueId>900001</gueId><firstName>SYNTHETIC_GUEST</firstName><phone>'+SYNTHETIC_PHONE+'</phone></guest><contactPerson><phone>'+SYNTHETIC_PHONE+'</phone></contactPerson><alfredCode>'+SYNTHETIC_ALF+'</alfredCode><note><![CDATA['+note+']]></note></reservation>';
  const booking={hotId:763519,resId:Number(q.resId),voucher:q.voucher,commissions:[{comId:Number(q.id),termFrom:rawFrom.replace(' ','T'),termTo:rawTo.replace(' ','T'),completeCheckin:checkin,guests:[{gueId:900001,hasCompleteInfo:checkin}]}]};
  const account={resId:Number(q.resId),groupAccount:{total:100,paid:paid?100:0,needPay:!paid,items:[{comId:Number(q.id),owner:{type:'guest',id:900001},price:100,paid:paid?100:0,count:1}]}};
- const reader=createPrevioReader({env:{PREVIO_API_KEY:'synthetic-only',VERCEL_GIT_COMMIT_SHA:'a'.repeat(40)},now:()=>new Date(now),ownerDecisions,fetcher:async(url,options)=>{
+ const env={PREVIO_API_KEY:'synthetic-only',VERCEL_GIT_COMMIT_SHA:'a'.repeat(40)};
+ if(override)env.HILLSIDE_OWNER_ARRIVAL_OVERRIDE=JSON.stringify(override);
+ const reader=createPrevioReader({env,now:()=>new Date(now),ownerDecisions:override?undefined:ownerDecisions,fetcher:async(url,options)=>{
   calls.push({url,method:options.method,redirect:options.redirect});
   assert.equal(options.redirect,'error');assert.ok(options.signal instanceof AbortSignal);
   if(url==='https://api.previo.app/x1/hotel/get'){assert.equal(options.method,'POST');return {ok:true,text:async()=>'<hotel><hotId>'+hotel+'</hotId><isTest>false</isTest></hotel>'};}
@@ -45,10 +47,28 @@ test('uptake exact owner stay reads only original XML identity/detail and return
  assert.deepEqual(d.marker.parsed,{comId:exact.id,apt:'2',from:'2027-01-25T15:00:00',to:'2027-01-29T10:00:00'});
  assert.equal(d.term.rawPmsFrom,'2027-01-25T16:00:00');assert.equal(d.term.effectiveFrom,'2027-01-25T15:00:00');
  assert.equal(d.term.startsAt,'2027-01-25T14:00:00.000Z');assert.equal(d.term.ownerArrival.sourceCaptureSha256,owner.actual_capture_sha256);
- assert.equal(d.term.ownerArrival.decisionConfigSha256,OWNER_ARRIVAL_SOURCE.sha256);assert.equal(d.source.revision,null);
+ assert.equal(d.term.ownerArrival.humanMessageId,owner.human_message_id);
+ assert.equal(Object.hasOwn(d.term.ownerArrival,'decisionConfigSha256'),false);assert.equal(d.source.revision,null);
  assert.equal(d.observedAt,'2026-11-06T02:00:00.000Z');assert.equal(d.deploymentCommit,'a'.repeat(40));assert.equal(d.noGuestCodeReturned,true);
  assert.equal(s.calls.length,2);assert.ok(s.calls.every(c=>c.method==='POST'&&/\/(get|searchReservations)$/.test(c.url)));assertRedacted(d);
 });
+test('private override without catalog hash applies only to its exact stay',async()=>{
+ const selected={...exact,id:'999999002',resId:'999999003',voucher:'SYNTHETICP4'};
+ const decision={...owner,com_id:selected.id,res_id:selected.resId,voucher:selected.voucher,
+  reservation_id:'airbnb:'+selected.voucher};
+ const override={decision};
+ const own=await setup({selected,override}).reader.uptake(selected);
+ assert.equal(own.term.ownerArrival.confirmedArrivalLocal,'15:00');
+ assert.equal(own.term.ownerArrival.sourceCaptureSha256,decision.actual_capture_sha256);
+ assert.equal(own.marker.validV2,true);
+ const previous=await setup({override}).reader.uptake(exact);
+ assert.equal(previous.term.ownerArrival.humanMessageId,owner.human_message_id);
+ const changed={...selected,departure:'2027-01-30'};
+ const other=await setup({selected:changed,override}).reader.uptake(changed);
+ assert.equal(other.term.ownerArrival,null);
+ assert.equal(other.term.effectiveFrom,changed.arrival+'T16:00:00');
+});
+
 test('uptake still returns no guest code inside the eligible time window',async()=>{assertRedacted(await setup({now:'2027-01-25T14:00:00Z'}).reader.uptake(exact));});
 test('uptake metadata does not depend on calling account/checkin/Wallet or registry',async()=>{const s=setup({restDenied:true});assert.equal((await s.reader.uptake(exact)).marker.validV2,true);assert.equal(s.calls.length,2);});
 test('detail before approved 15h retains all gates and keeps code hidden',async()=>{const d=await setup({now:'2027-01-25T13:59:59Z'}).reader.detail(exact);assert.equal(d.accessCode,'');assert.equal(d.releaseAt,'2027-01-25T14:00:00.000Z');assert.equal(d.rawPmsFrom,'2027-01-25T16:00:00');});
