@@ -20,6 +20,7 @@ function destination(value,lang){
 export function createGuestLinkHandler({store=redis}={}){return async(req,res)=>{
  res.setHeader('Cache-Control','no-store');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Robots-Tag','noindex, nofollow');
  if(req.method==='POST'){
+  return res.status(503).json({ok:false,reason:'guest_link_issuance_held'});
   if(!isAuthorized(req))return res.status(401).json({error:'Přihlaste se ke správě Wallet.'});
   let urls;try{urls=Object.fromEntries(['cs','en','de'].map(lang=>[lang,destination(req.body?.urls?.[lang],lang)]));}catch{return res.status(400).json({error:'Odkaz musí vést na portál Hillside se správným stavem pobytu.'});}
   try{
@@ -40,7 +41,7 @@ export function createGuestLinkHandler({store=redis}={}){return async(req,res)=>
  if(typeof id!=='string'||! /^[A-Za-z0-9_-]{22}$/.test(id)||!['cs','en','de'].includes(lang))return res.status(404).end('Odkaz nebyl nalezen.');
  try{
   const raw=await store(['GET',prefix+id]);if(!raw)return res.status(404).end('Odkaz již není dostupný. Kontaktujte prosím recepci.');
-  const url=destination(JSON.parse(raw)[lang],lang),stay=urlStay(url);if(stay)await assertActiveReference(store,stay);res.setHeader('Location',url);return res.status(302).end();
+  const url=destination(JSON.parse(raw)[lang],lang),stay=urlStay(url);if(stay)await assertActiveReference(store,stay);return res.status(503).end('Pristupovy odkaz je docasne pozastaven. Kontaktujte recepci.');
  }catch(error){
   if(error?.code==='RESERVATION_CANCELLED'){
    res.setHeader('Content-Type','text/plain; charset=utf-8');

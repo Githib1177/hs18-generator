@@ -24,6 +24,7 @@ export const ERR_MAP = {
   10:'Neplatné telefonní číslo',11:'Prázdný text zprávy',12:'Zpráva je příliš dlouhá; zkraťte ji na nejvýše 459 SMS znaků',13:'Neplatné číslo odesílatele'
 };
 async function send(req, res, managerGrant=null) {
+ if(req.method==='POST')return res.status(503).json({ok:false,reason:'guest_link_issuance_held'});
   if (req.method !== 'POST') return res.status(405).json({error:'Method not allowed'});
   const {to,text} = req.body || {};
   const message = prepareText(text);

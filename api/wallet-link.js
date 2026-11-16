@@ -31,6 +31,7 @@ const capture=()=>({code:200,setHeader(){},status(code){this.code=code;return th
 export function createWalletLinkHandler({store=redis,getConfig=walletConfig,getObject=getWalletObject,createCard}={}){
  const provision=createCard||createWalletHandler({store,getConfig});
  return async(req,res)=>{
+ if(req.method==='POST')return res.status(503).json({ok:false,reason:'guest_link_issuance_held'});
   res.setHeader('Cache-Control','no-store');res.setHeader('Referrer-Policy','no-referrer');
   if(req.method==='POST'&&process.env.VERCEL_ENV&&process.env.VERCEL_ENV!=='production')return res.status(403).json({ok:false,error:'Testovací verze karty ani odkazy nemění.'});
   if(!isAuthorized(req))return res.status(401).json({ok:false,error:'Přihlaste se ke správě Wallet v Messengeru.'});

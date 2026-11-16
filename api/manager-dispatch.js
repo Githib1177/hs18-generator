@@ -41,6 +41,7 @@ export function createManagerDispatchHandler({store=redis,walletHandler=wallet,l
   if(!isAuthorized(req))return res.status(401).json({error:'Přihlaste se ke správě Wallet.'});
   if(req.method!=='POST')return res.status(405).json({error:'Method not allowed'});
   if(process.env.VERCEL_ENV&&process.env.VERCEL_ENV!=='production')return res.status(403).json({error:'Preview neprovádí provozní zápisy.'});
+  if(['prepare','send','retry','owner-send'].includes(req.body?.action))return res.status(503).json({ok:false,reason:'guest_link_issuance_held'});
   const b=req.body||{},headers={...req.headers,'x-history-key':process.env.HISTORY_ACCESS_KEY};
   if(!headers['x-history-key'])return res.status(503).json({error:'Chybí konfigurace společné historie.'});
   const locks=[];
