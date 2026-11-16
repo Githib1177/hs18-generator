@@ -11,9 +11,9 @@ const q={id:'123',resId:'456',voucher:'fixture',apt:'3',arrival:'2027-01-15',dep
 const source={...q,hotelId:'763519',statusId:'7',alf:'SYNTHCANCEL',observedAt:'2026-11-04T12:00:00Z'};
 const hash=registry.hash(source.alf),clock=()=>new Date('2026-11-04T12:00:00Z');
 const response=()=>({code:200,headers:{},setHeader(k,v){this.headers[k]=v},status(v){this.code=v;return this},json(v){this.body=v;return this},end(v){this.body=v;return this}});
-function fixture({hasPass=true,lost=false,unknown=false,pending=false,wrong=false}={}){
+function fixture({hasPass=true,lost=false,unknown=false,pending=false,wrong=false,providerState='ACTIVE',busyUntil=0}={}){
  const strings=new Map(),writes=[],events=pending?[JSON.stringify({stay:hash,status:'unknown'})]:[];
- let google=hasPass?{id:'123.00000000-0000-0000-0000-000000000001',classId:'123.c',state:'ACTIVE',cardTitle:{defaultValue:{language:'cs',value:'Hillside'}},header:{defaultValue:{value:'PRIVATE_PIN'}},textModulesData:[{id:'door',body:'PRIVATE_PIN'}],barcode:{value:'PRIVATE'}}:null,puts=0;
+ let google=hasPass?{id:'123.00000000-0000-0000-0000-000000000001',classId:'123.c',state:providerState,cardTitle:{defaultValue:{language:'cs',value:'Hillside'}},header:{defaultValue:{value:'PRIVATE_PIN'}},textModulesData:[{id:'door',body:'PRIVATE_PIN'}],barcode:{value:'PRIVATE'}}:null,puts=0;
  const store=async c=>{
   if(c[0]==='GET')return strings.get(c[1])||null;
   if(c[0]==='HVALS')return events;
@@ -22,7 +22,7 @@ function fixture({hasPass=true,lost=false,unknown=false,pending=false,wrong=fals
   if(c[0]==='EVAL'){if(c[2]===1){if(strings.get(c[3])!==c[4])return 0;strings.delete(c[3]);return 1;}if(strings.get(c[3])!==c[6])return 0;strings.set(c[4],c[7]);strings.set(c[5],c[7]);return 1;}
   throw Error('Unmocked command');
  };
- const pass={passId:'00000000-0000-0000-0000-000000000001',state:unknown?null:'ready',busyUntil:0};
+ const pass={passId:'00000000-0000-0000-0000-000000000001',state:unknown?null:'ready',busyUntil};
  if(hasPass){strings.set(stayKey(hash),JSON.stringify(pass));strings.set(passKey(pass.passId),JSON.stringify(pass));}
  const h=createCancellationHandler({authorize:()=>true,env:{VERCEL_ENV:'production',VERCEL_GIT_COMMIT_SHA:'a'.repeat(40)},managerAuthorized:req=>req.testSigned===true,now:clock,store,reader:{cancelledDetail:async()=>wrong?{...source,statusId:'2'}:source},getConfig:()=>({issuerId:'123'}),getObject:async()=>google,putObject:async(o,c,f,options)=>{assert.equal(options.allowCreate,false);puts++;google=o;if(lost)throw Error('response lost');}});
  const call=async(method='POST',{recover=false,signed=false}={})=>{const r=response();await h({method,query:q,testSigned:signed,body:{reservation:q,recoverVerifiedActiveWallet:recover}},r);return r;};
@@ -69,6 +69,29 @@ test('actual existing registry route separates cancellation and preserves cookie
   const out=response();await handler(req,out);assert.equal(out.code,200);assert.equal(out.body.receipt.statusId,'7');assert.equal(out.body.ok,false);assert.ok(reads>0);
  }
  const denied=response();await handler({method:'POST',query:{operation:'cancellation'},body:{reservation:q},headers:{'x-history-key':'synthetic'}},denied);assert.equal(denied.code,401);
+});
+test('signed read distinguishes Wallet states, active writes and stale pass contents',async()=>{
+ for(const providerState of ['active','inactive','expired','COMPLETED',null]){
+  const s=fixture({unknown:true,providerState});
+  assert.equal((await s.call()).body.status,'wallet_unknown');
+  const publicRead=await s.call('GET');
+  assert.equal(publicRead.body.receipt.walletRecoveryReason,undefined);
+  const before=await s.call('GET',{signed:true});
+  assert.equal(before.body.receipt.walletRecoveryReason,'current_pass_needs_revocation');
+  assert.equal(before.body.receipt.walletProviderState,providerState?.toUpperCase()??'ACTIVE');
+  assert.equal(s.puts(),0);
+  assert.equal((await s.call('POST',{recover:true,signed:true})).body.ok,true);
+  assert.equal((await s.call('GET',{signed:true})).body.receipt.walletStatus,'expired_verified');
+  assert.equal(s.puts(),1);
+ }
+ for(const [conditions,reason] of [[{providerState:'STATE_UNSPECIFIED'},'unrecognized_provider_state'],
+     [{busyUntil:clock().getTime()+1000},'current_wallet_write_in_progress']]){
+  const s=fixture({unknown:true,...conditions});
+  assert.equal((await s.call()).body.status,'wallet_unknown');
+  assert.equal((await s.call('GET',{signed:true})).body.receipt.walletRecoveryReason,reason);
+  assert.equal((await s.call('POST',{recover:true,signed:true})).body.status,'wallet_unknown');
+  assert.equal(s.puts(),0);
+ }
 });
 test('one signed continuation can expire an independently still active Wallet; old link barrier is preserved',async()=>{
  const s=fixture({unknown:true});
