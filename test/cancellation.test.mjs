@@ -24,8 +24,8 @@ function fixture({hasPass=true,lost=false,unknown=false,pending=false,wrong=fals
  };
  const pass={passId:'00000000-0000-0000-0000-000000000001',state:unknown?null:'ready',busyUntil:0};
  if(hasPass){strings.set(stayKey(hash),JSON.stringify(pass));strings.set(passKey(pass.passId),JSON.stringify(pass));}
- const h=createCancellationHandler({authorize:()=>true,env:{VERCEL_ENV:'production',VERCEL_GIT_COMMIT_SHA:'a'.repeat(40)},now:clock,store,reader:{cancelledDetail:async()=>wrong?{...source,statusId:'2'}:source},getConfig:()=>({issuerId:'123'}),getObject:async()=>google,putObject:async(o,c,f,options)=>{assert.equal(options.allowCreate,false);puts++;google=o;if(lost)throw Error('response lost');}});
- const call=async(method='POST')=>{const r=response();await h({method,query:q,body:{reservation:q}},r);return r;};
+ const h=createCancellationHandler({authorize:()=>true,env:{VERCEL_ENV:'production',VERCEL_GIT_COMMIT_SHA:'a'.repeat(40)},managerAuthorized:req=>req.testSigned===true,now:clock,store,reader:{cancelledDetail:async()=>wrong?{...source,statusId:'2'}:source},getConfig:()=>({issuerId:'123'}),getObject:async()=>google,putObject:async(o,c,f,options)=>{assert.equal(options.allowCreate,false);puts++;google=o;if(lost)throw Error('response lost');}});
+ const call=async(method='POST',{recover=false,signed=false}={})=>{const r=response();await h({method,query:q,testSigned:signed,body:{reservation:q,recoverVerifiedActiveWallet:recover}},r);return r;};
  return {call,strings,store,writes,puts:()=>puts,object:()=>google};
 }
 test('cancelled PMS is read separately, exact identity/status/hotel and proper XML; active reader rejects it',async()=>{
@@ -39,7 +39,7 @@ test('one cancellation expires existing card, blocks save/messages/links; repeat
  const s=fixture();let r=await s.call();assert.equal(r.body.ok,true);assert.equal(r.body.receipt.messagesSent,0);assert.equal(s.puts(),1);assert.doesNotMatch(JSON.stringify(s.object()),/PRIVATE/);
  assert.equal((await s.call()).body.ok,true);assert.equal(s.puts(),1);await assert.rejects(assertActiveReference(s.store,hash));
  const id='x'.repeat(22);s.strings.set('hs18:guest-link:'+id,JSON.stringify({cs:'https://hillside18-guest-portal.vercel.app/?apt=3&alf='+source.alf}));
- const out=response();await createGuestLinkHandler({store:s.store})({method:'GET',query:{id}},out);assert.notEqual(out.code,302);assert.equal(out.headers.Location,undefined);
+ const out=response();await createGuestLinkHandler({store:s.store})({method:'GET',query:{id}},out);assert.equal(out.code,410);assert.match(out.body,/Tato rezervace byla zrušena.*840 113 114/);assert.equal(out.headers.Location,undefined);
 });
 test('lost expiration response reconciles by GET without second PUT',async()=>{const s=fixture({lost:true});assert.equal((await s.call()).code,503);assert.equal((await s.call()).body.ok,true);assert.equal(s.puts(),1);});
 test('unknown original Wallet is not overwritten, unresolved send prevents full completion',async()=>{
@@ -69,4 +69,17 @@ test('actual existing registry route separates cancellation and preserves cookie
   const out=response();await handler(req,out);assert.equal(out.code,200);assert.equal(out.body.receipt.statusId,'7');assert.equal(out.body.ok,false);assert.ok(reads>0);
  }
  const denied=response();await handler({method:'POST',query:{operation:'cancellation'},body:{reservation:q},headers:{'x-history-key':'synthetic'}},denied);assert.equal(denied.code,401);
+});
+test('one signed continuation can expire an independently still active Wallet; old link barrier is preserved',async()=>{
+ const s=fixture({unknown:true});
+ assert.equal((await s.call()).body.status,'wallet_unknown');
+ const before=await s.call('GET');
+ assert.equal(before.body.receipt.walletRecoveryAvailable,true);
+ assert.equal(before.body.receipt.walletStatus,'active');
+ assert.equal((await s.call('POST',{recover:true})).code,403);
+ assert.equal(s.puts(),0);
+ assert.equal((await s.call('POST',{recover:true,signed:true})).body.ok,true);
+ assert.equal((await s.call('GET')).body.receipt.walletStatus,'expired_verified');
+ assert.equal((await s.call('POST',{recover:true,signed:true})).body.ok,true);
+ assert.equal(s.puts(),1);
 });

@@ -5,6 +5,11 @@ import {assertActiveReference,urlStay} from '../lib/cancellation-guard.js';
 const prefix='hs18:guest-link:';
 const lifetime=180*86400;
 const origin='https://hillside18-guest-portal.vercel.app';
+const cancelledMessage={
+ cs:'Tato rezervace byla zrušena. Odkaz již není platný. V případě dotazů nás kontaktujte na +420 840 113 114.',
+ en:'This reservation has been cancelled. The link is no longer valid. For questions, contact us at +420 840 113 114.',
+ de:'Diese Reservierung wurde storniert. Der Link ist nicht mehr gültig. Bei Fragen erreichen Sie uns unter +420 840 113 114.'
+};
 function destination(value,lang){
  if(typeof value!=='string'||value.length>2048)throw Error('Invalid URL');
  const url=new URL(value);
@@ -36,6 +41,12 @@ export function createGuestLinkHandler({store=redis}={}){return async(req,res)=>
  try{
   const raw=await store(['GET',prefix+id]);if(!raw)return res.status(404).end('Odkaz již není dostupný. Kontaktujte prosím recepci.');
   const url=destination(JSON.parse(raw)[lang],lang),stay=urlStay(url);if(stay)await assertActiveReference(store,stay);res.setHeader('Location',url);return res.status(302).end();
- }catch{return res.status(503).end('Portál je dočasně nedostupný. Zkuste to prosím znovu.');}
+ }catch(error){
+  if(error?.code==='RESERVATION_CANCELLED'){
+   res.setHeader('Content-Type','text/plain; charset=utf-8');
+   return res.status(410).end(cancelledMessage[lang]);
+  }
+  return res.status(503).end('Portál je dočasně nedostupný. Zkuste to prosím znovu.');
+ }
 };}
 export default createGuestLinkHandler();
