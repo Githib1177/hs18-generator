@@ -1,7 +1,7 @@
 import registry from '../lib/registry.cjs';
 import manualRepeat from '../lib/manual-resend.cjs';
 import {isAuthorized} from './_wallet-auth.js';
-const {authorized,contextOf,contextFromMessage,checkContext,claim,finish} = registry;
+const {contextOf,contextFromMessage,checkContext,claim,finish} = registry;
 // SMS Connect accepts at most three 7-bit SMS segments (459 septets).
 export function prepareText(value) {
   return String(value || '').normalize('NFD').replace(/\p{Diacritic}/gu, '')
@@ -24,8 +24,8 @@ export const ERR_MAP = {
   10:'Neplatné telefonní číslo',11:'Prázdný text zprávy',12:'Zpráva je příliš dlouhá; zkraťte ji na nejvýše 459 SMS znaků',13:'Neplatné číslo odesílatele'
 };
 async function send(req, res, managerGrant=null) {
- if(req.method==='POST')return res.status(503).json({ok:false,reason:'guest_link_issuance_held'});
   if (req.method !== 'POST') return res.status(405).json({error:'Method not allowed'});
+  if(!isAuthorized(req))return res.status(401).json({ok:false,error:'Přihlaste se k odeslání SMS.'});
   const {to,text} = req.body || {};
   const message = prepareText(text);
   if (!message) return res.status(400).json({ok:false,error:'Chybí text SMS.'});
@@ -41,7 +41,6 @@ async function send(req, res, managerGrant=null) {
   if (!login || !password) return res.status(500).json({ok:false,error:'Chybí přihlášení k SMS bráně.'});
   let context=null,event=null;
   if(req.body?.context){
-    if(!authorized(req))return res.status(401).json({ok:false,error:'Obnovte generátor: chybí ověření historie.'});
     try{
       context=contextOf(req.body);const actual=await contextFromMessage(text);
       if(!actual||actual.stay!==context.stay||actual.state!==context.state||actual.apt!==context.apt)throw new Error('Text neodpovídá aktuálním údajům. Vytvořte odkaz znovu.');
@@ -54,7 +53,7 @@ async function send(req, res, managerGrant=null) {
     try{
       const duplicate=(await checkContext(context)).duplicate;
       const token=req.body?.manualResendToken;
-      if(token&&(!req.body?.context||req.body?.mode!=='manual'||!authorized(req)))return res.status(401).json({ok:false,error:'Ruční opakování není ověřeno.'});
+      if(token&&(!req.body?.context||req.body?.mode!=='manual'||!isAuthorized(req)))return res.status(401).json({ok:false,error:'Ruční opakování není ověřeno.'});
       if(managerGrant){
         if(!isAuthorized(req)||!['retry','owner'].includes(managerGrant.kind)||managerGrant.originalKey!==context.key||!/^[a-f0-9]{64}$/.test(managerGrant.authorizationHash||'')||managerGrant.key!==(context.key+(managerGrant.kind==='retry'?':retry1':':owner:'+managerGrant.authorizationHash)))return res.status(401).json({ok:false,error:'Neplatná vazba povoleného pokusu.'});
         if(token)return res.status(400).json({ok:false,error:'Automatický pokus není ruční opakování.'});
@@ -62,7 +61,7 @@ async function send(req, res, managerGrant=null) {
       }else if(duplicate){
         const safety=await manualRepeat.assess(context);
         if(!safety.allowed)return res.status(409).json({ok:false,error:safety.reason,allowManualResend:false});
-        if(!token)return res.status(409).json({ok:false,error:safety.reason,allowManualResend:!!req.body?.context&&authorized(req),manualResendToken:req.body?.context&&authorized(req)?manualRepeat.issue(context,message,numbers):undefined});
+        if(!token)return res.status(409).json({ok:false,error:safety.reason,allowManualResend:!!req.body?.context&&isAuthorized(req),manualResendToken:req.body?.context&&isAuthorized(req)?manualRepeat.issue(context,message,numbers):undefined});
         if(!manualRepeat.verify(token,context,message,numbers))return res.status(409).json({ok:false,error:'Potvrzení vypršelo nebo se změnil obsah. Zkontrolujte zprávu znovu.'});
         context={...context,repeatOf:context.key,key:manualRepeat.key(token),manualResend:true};
       }else if(token)return res.status(409).json({ok:false,error:'Stav registru se změnil. Zkontrolujte zprávu znovu.'});

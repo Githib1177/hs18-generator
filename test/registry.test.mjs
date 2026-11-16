@@ -1,3 +1,4 @@
+import {createSessionCookie} from '../api/_wallet-auth.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import handler from '../api/send-sms.js';
@@ -7,7 +8,7 @@ const {HISTORY,EVENTS,contextOf,normalizeAlf,contextFromText}=registry;
 
 test('registry guards actual SMS handler without a real network',async t=>{
  const original={...process.env};t.after(()=>{process.env=original});
- Object.assign(process.env,{HISTORY_ACCESS_KEY:'unit-test',SMS_LOGIN:'test',SMS_PASSWORD:'test',UPSTASH_REDIS_REST_URL:'https://redis.invalid',UPSTASH_REDIS_REST_TOKEN:'test',VERCEL_ENV:'production'});
+ Object.assign(process.env,{HISTORY_ACCESS_KEY:'unit-test',HILLSIDE_WALLET_SESSION_SECRET:'cookie-fixture',SMS_LOGIN:'test',SMS_PASSWORD:'test',UPSTASH_REDIS_REST_URL:'https://redis.invalid',UPSTASH_REDIS_REST_TOKEN:'test',VERCEL_ENV:'production'});
  const strings=new Map(),hashes=new Map();let providerCalls=0,storageDown=false,providerMode='ok';
  t.mock.method(globalThis,'fetch',async(url,options)=>{
   if(String(url).startsWith('https://api.smsbrana.cz/')){
@@ -31,7 +32,12 @@ test('registry guards actual SMS handler without a real network',async t=>{
   return {ok:true,json:async()=>({result})};
  });
  const body=(alf='TESTCODE',state='none')=>({to:['+420777000001'],text:`Hillside 18: Info https://hillside18-guest-portal.vercel.app/?apt=1&alf=${alf}${state==='none'?'':'&'+state+'=1'}`,context:{alf,apt:'1',state}});
- async function call(fn,b,auth=true){let r={setHeader(){},status(c){this.code=c;return this},json(d){this.data=d;return this}};await fn({method:'POST',headers:auth?{'x-history-key':'unit-test'}:{},body:b},r);return r;}
+ async function call(fn,b,auth=true){let r={setHeader(){},status(c){this.code=c;return this},json(d){this.data=d;return this}};await fn({method:'POST',headers:auth?{cookie:createSessionCookie().split(';')[0]}:{},body:b},r);return r;}
+ await t.test('old shared history key cannot authorize an unauthenticated send',async()=>{
+  let res={status(n){this.code=n;return this;},json(x){this.data=x;return this;}};
+  await handler({method:'POST',headers:{'x-history-key':'unit-test'},body:{to:'+420777000001',text:'Fixture'}},res);
+  assert.equal(res.code,401);
+ });
  await t.test('old full and compact Alfred links normalize identically',()=>{assert.equal(normalizeAlf('https://alfred.previo.app/login/TESTCODE'),'TESTCODE');assert.equal(contextOf(body()).stay,contextFromText(body().text).stay)});
  await t.test('historical success blocks repeat without mutating old history',async()=>{
   const raw=JSON.stringify([{id:'old-1',alf:'https://alfred.previo.app/login/TESTCODE',apt:'1',state:'none',ts:123,door:'SECRET',guestName:'private'}]);strings.set(HISTORY,raw);
@@ -61,8 +67,8 @@ test('registry guards actual SMS handler without a real network',async t=>{
  await t.test('storage unavailable means no provider call',async()=>{storageDown=true;let before=providerCalls;assert.equal((await call(handler,body('OFFLINE1'))).code,503);assert.equal(before,providerCalls);storageDown=false});
  await t.test('preview refuses provider and registry claims',async()=>{process.env.VERCEL_ENV='preview';let before=providerCalls;assert.equal((await call(handler,body('PREVIEW1'))).code,403);assert.equal(before,providerCalls);process.env.VERCEL_ENV='production'});
  await t.test('stale text and malformed context never send',async()=>{let b=body('STALE001');b.context.alf='OTHER001';let before=providerCalls;assert.equal((await call(handler,b)).code,400);assert.equal(before,providerCalls);assert.equal((await call(handler,body('NOAUTH01'),false)).code,401)});
- await t.test('older live tabs with only to/text still receive duplicate protection',async()=>{let b=body();delete b.context;let before=providerCalls;assert.equal((await call(handler,b,false)).code,409);assert.equal(providerCalls,before)});
- await t.test('legacy non-portal SMS contract preserved',async()=>{let r=await call(handler,{to:'+420777000001',text:'Unit test without portal'},false);assert.equal(r.code,200);assert.equal(r.data.results[0].ok,true)});
+ await t.test('older live tabs with only to/text still receive duplicate protection',async()=>{let b=body();delete b.context;let before=providerCalls;assert.equal((await call(handler,b)).code,409);assert.equal(providerCalls,before)});
+ await t.test('legacy non-portal SMS contract preserved',async()=>{let r=await call(handler,{to:'+420777000001',text:'Unit test without portal'});assert.equal(r.code,200);assert.equal(r.data.results[0].ok,true)});
  await t.test('short links resolve stored state and retain duplicate and mismatch guards',async()=>{
   for(const state of ['none','paid','unpaid','done']){
    const b=body('SHORT'+state.toUpperCase(),state),id=state.padEnd(22,'x');
@@ -71,7 +77,7 @@ test('registry guards actual SMS handler without a real network',async t=>{
    let before=providerCalls;const wrong={...b,context:{...b.context,state:state==='done'?'unpaid':'done'}};
    assert.equal((await call(handler,wrong)).code,400);assert.equal(providerCalls,before);
    assert.equal((await call(handler,b)).code,200);assert.equal(providerCalls,before+1);
-   delete b.context;assert.equal((await call(handler,b,false)).code,409);assert.equal(providerCalls,before+1);
+   delete b.context;assert.equal((await call(handler,b)).code,409);assert.equal(providerCalls,before+1);
   }
   let before=providerCalls;const missing=body('SHORTMISS');missing.text='https://hs18-generator.vercel.app/s/'+'z'.repeat(22);
   assert.equal((await call(handler,missing)).code,400);assert.equal(providerCalls,before);

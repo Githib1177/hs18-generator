@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import {isAuthorized} from './_wallet-auth.js';
 
 const HISTORY_KEY = 'hs18:message-history:v1';
 const HISTORY_LIMIT = 20;
@@ -6,18 +7,6 @@ const HISTORY_LIMIT = 20;
 function send(res, status, payload) {
   res.setHeader('Cache-Control', 'no-store');
   return res.status(status).json(payload);
-}
-
-function safeEqual(a, b) {
-  const left = Buffer.from(String(a || ''), 'utf8');
-  const right = Buffer.from(String(b || ''), 'utf8');
-  return left.length === right.length && crypto.timingSafeEqual(left, right);
-}
-
-function authorize(req) {
-  const expected = process.env.HISTORY_ACCESS_KEY;
-  const supplied = req.headers['x-history-key'];
-  return Boolean(expected && supplied && safeEqual(supplied, expected));
 }
 
 function redisConfig() {
@@ -75,7 +64,7 @@ function normalizeEntry(body) {
 }
 
 export default async function handler(req, res) {
-  if (!authorize(req)) return send(res, 401, { ok: false, error: 'Neplatný přístupový klíč historie' });
+  if (!isAuthorized(req)) return send(res, 401, { ok: false, error: 'Neplatný přístupový klíč historie' });
   try {
     if (req.method === 'GET') return send(res, 200, { ok: true, items: await readHistory() });
     if (req.method === 'POST') {

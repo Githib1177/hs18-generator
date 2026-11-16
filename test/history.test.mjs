@@ -1,12 +1,11 @@
+import {createSessionCookie} from '../api/_wallet-auth.js';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import vm from 'node:vm';
 import crypto from 'node:crypto';
 
-// Load the unmodified server module without changing the project's module setup.
-const server = await readFile(new URL('../api/history.js', import.meta.url), 'utf8');
-const { default: handler } = await import(`data:text/javascript;base64,${Buffer.from(server).toString('base64')}`);
+import handler from '../api/history.js';
 const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 
@@ -26,6 +25,7 @@ test('history preserves reservation state and guest content across save/load/reo
   const env = { ...process.env };
   t.after(() => { process.env = env; });
   process.env.HISTORY_ACCESS_KEY = 'test-only';
+  process.env.HILLSIDE_WALLET_SESSION_SECRET='cookie-fixture';
   process.env.UPSTASH_REDIS_REST_URL = 'https://history.invalid';
   process.env.UPSTASH_REDIS_REST_TOKEN = 'test-only';
   t.mock.method(Date, 'now', () => 1700000000000);
@@ -43,7 +43,7 @@ test('history preserves reservation state and guest content across save/load/reo
   });
   async function request(method, body) {
     const response = { setHeader() {}, status(code) { this.code = code; return this; }, json(data) { this.data = data; } };
-    await handler({ method, headers: { 'x-history-key': 'test-only' }, body }, response);
+    await handler({ method, headers: { cookie: createSessionCookie().split(';')[0] }, body }, response);
     assert.equal(response.code, 200);
     assert.equal(response.data.ok, true);
     return JSON.parse(JSON.stringify(response.data));

@@ -1,17 +1,19 @@
 (()=>{
  const q=id=>document.getElementById(id),input=q('reservationSearch'),list=q('reservationSuggestions'),status=q('reservationSearchStatus');
- let timer,controller,sequence=0,options=[],active=-1,applying=false;
+ let timer,controller,sequence=0,options=[],active=-1,applying=false,selected=null;
+ window.hillsideGuestReference=()=>selected;
  const close=()=>{list.replaceChildren();options=[];active=-1;input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');};
  const message=text=>{status.textContent=text;};
  const format=date=>date.split('-').reverse().join('.');
  async function choose(item){
-  const current=++sequence;controller?.abort();controller=new AbortController();close();message('Načítám vybranou rezervaci…');
+  const current=++sequence;selected=null;controller?.abort();controller=new AbortController();close();message('Načítám vybranou rezervaci…');
   try{
    const params=new URLSearchParams({mode:'detail',id:item.id,resId:item.resId,arrival:item.arrival,departure:item.departure,voucher:item.voucher,apt:item.apt});
    const response=await fetch('/api/reservations?'+params,{credentials:'same-origin',cache:'no-store',signal:controller.signal}),data=await response.json();
    if(current!==sequence)return;if(!response.ok||!data.ok)throw Error(data.error||'Rezervaci se nepodařilo načíst.');const s=data.item;
    if(!s||s.id!==item.id||s.resId!==item.resId||s.voucher!==item.voucher||s.apt!==item.apt||s.arrival!==item.arrival||s.departure!==item.departure)throw Error('Rezervace se změnila. Vyhledejte ji znovu.');
    // Clear ALL guest-specific output and access state before filling a new stay.
+   selected=Object.fromEntries(['id','resId','voucher','apt','arrival','departure'].map(k=>[k,s[k]]));
    applying=true;
    q('guestName').value=s.guestName||'';q('guestIsFemale').value='auto';q('alf').value=s.alf||'';q('phone').value=s.phone||'';q('lang').value=['cs','en','de'].includes(s.lang)?s.lang:'cs';q('door').value=s.testCode==='TEST'?'TEST':s.accessConfirmed===true?s.accessCode||'':'';
    for(const id of ['checkinComplete','paymentComplete']){q(id).checked=s[id]===true;q(id).indeterminate=typeof s[id]!=='boolean';}
@@ -44,7 +46,7 @@
    input.setAttribute('aria-expanded',String(options.length>0));message(options.length?(data.truncated?'Vyberte pobyt, nebo upřesněte hledání pro další výsledky.':'Vyberte odpovídající pobyt.'): 'Žádná odpovídající aktivní rezervace v posledních30 dnech a příštích12 měsících.');
   }catch(error){if(error.name!=='AbortError'&&current===sequence)message(error.message);}
  }
- input.addEventListener('input',()=>{++sequence;controller?.abort();clearTimeout(timer);close();timer=setTimeout(search,350);});
+ input.addEventListener('input',()=>{selected=null;++sequence;controller?.abort();clearTimeout(timer);close();timer=setTimeout(search,350);});
  input.addEventListener('keydown',event=>{
   if(event.key==='Escape'){++sequence;controller?.abort();clearTimeout(timer);close();return;}
   if(!options.length)return;

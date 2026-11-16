@@ -1,11 +1,12 @@
-import {authenticateManager} from '../lib/hall3000-manager-auth.js';
+import {authenticateManager,isAuthenticatedManager} from '../lib/hall3000-manager-auth.js';
 import {createCancellationHandler} from '../lib/cancellation-handler.js';
 import {createManagerHistoryHandler} from '../lib/manager-history-handler.js';
 import {createPrevioReader} from '../lib/previo-reservations.js';
 import {randomUUID} from 'node:crypto';
+import {guestReference,bindGuestReference,checkedOriginal} from '../lib/live-guest-link.js';
 import {isAuthorized} from './_wallet-auth.js';
 import wallet from './wallet.js';
-import guestLink from './guest-link.js';
+import guestLink,{fromManagerPreparation} from './guest-link.js';
 import sendSms, {sendAuthorizedAttempt,prepareText,smsLength} from './send-sms.js';
 import history from './history.js';
 import registry from '../lib/registry.cjs';
@@ -41,7 +42,6 @@ export function createManagerDispatchHandler({store=redis,walletHandler=wallet,l
   if(!isAuthorized(req))return res.status(401).json({error:'Přihlaste se ke správě Wallet.'});
   if(req.method!=='POST')return res.status(405).json({error:'Method not allowed'});
   if(process.env.VERCEL_ENV&&process.env.VERCEL_ENV!=='production')return res.status(403).json({error:'Preview neprovádí provozní zápisy.'});
-  if(['prepare','send','retry','owner-send'].includes(req.body?.action))return res.status(503).json({ok:false,reason:'guest_link_issuance_held'});
   const b=req.body||{},headers={...req.headers,'x-history-key':process.env.HISTORY_ACCESS_KEY};
   if(!headers['x-history-key'])return res.status(503).json({error:'Chybí konfigurace společné historie.'});
   const locks=[];
@@ -60,11 +60,12 @@ export function createManagerDispatchHandler({store=redis,walletHandler=wallet,l
     await assertActiveReference(store,input.stayHash);
     const id=b.preparationId===undefined?randomUUID():b.preparationId;if(!uuid(id))return res.status(400).json({error:'Neplatné stabilní ID přípravy.'});
     await hold(prefix+id+':prepare-lock');
+    const bind=()=>isAuthenticatedManager(req)&&b.guestReference?bindGuestReference(store,shortId(id),b.guestReference):undefined;
     const oldRaw=await store(['GET',prefix+id]);let record=oldRaw?JSON.parse(oldRaw):null;
     if(record){
      if(record.requestHash!==input.requestHash)return res.status(409).json({error:'Stejné ID přípravy nesmí změnit pobyt ani obsah.'});
      record=await recover(record);
-     if(record.phase==='prepared')return res.status(200).json(prepared(record));
+     if(record.phase==='prepared'){await bind();return res.status(200).json(prepared(record));}
      if(Date.now()-record.createdAt>900000&&!fresh(b.sourceCheckedAt))return res.status(409).json({status:'preparation_unknown',id,error:'Starou přípravu dokončete jen po novém ověření aktuálních podkladů.'});
      if(!['wallet_ready'].includes(record.phase)&&record.recovery!=='wallet_not_started')return res.status(202).json({ok:false,status:'preparation_unknown',id,recovery:record.recovery});
     }else{
@@ -78,9 +79,9 @@ export function createManagerDispatchHandler({store=redis,walletHandler=wallet,l
      if(!/^[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/.test(w.body.guestToken||'')||w.body.state!==(record.context.state==='done'?'ready':'pending')||!w.body.revision)throw Error('Google nepotvrdil správný stav karty.');
      record={...record,phase:'wallet_ready',passId:w.body.passId,walletRevision:w.body.revision,walletState:w.body.state,targets:targets(record,w.body.guestToken)};await save(record);
     }
-    const link=await invoke(linkHandler,{...req,headers:req.headers,body:{id:record.shortId,urls:record.targets}});
+    const link=await invoke(linkHandler,fromManagerPreparation({...req,headers:req.headers,body:{id:record.shortId,urls:record.targets}}));
     if(link.code!==200)return res.status(link.code).json({...link.body,id,status:'preparation_unknown'});
-    record={...record,phase:'prepared',urls:link.body.urls};await save(record);return res.status(200).json(prepared(record));
+    await bind();record={...record,phase:'prepared',urls:link.body.urls};await save(record);return res.status(200).json(prepared(record));
    }
    if(!['send','retry','owner-send','status','reconcile','reconcile-prepare'].includes(b.action)||!uuid(b.id))return res.status(400).json({error:'Neplatná operace.'});
    const raw=await store(['GET',prefix+b.id]);if(!raw)return res.status(404).json({error:'Příprava nebyla nalezena.'});
@@ -142,17 +143,22 @@ export function createManagerDispatchHandler({store=redis,walletHandler=wallet,l
   finally{for(const {key,claim} of locks.reverse())try{await store(['EVAL',"if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('DEL',KEYS[1]) end return 0",1,key,claim]);}catch{}}
  };
 }
-const managerActions = new Set(['prepare','send','retry','owner-send','status','reconcile','reconcile-prepare','cancel','cancellation-status','history','probe']);
+const managerActions = new Set(['prepare','send','retry','owner-send','status','reconcile','reconcile-prepare','cancel','cancellation-status','history','probe','link-audit','link-bind']);
 
 export function createEndpoint({
  dispatch = createManagerDispatchHandler(),
  cancellation = createCancellationHandler(),
  historyRead = createManagerHistoryHandler(),
  reader = createPrevioReader(),
+ linkStore = redis,
  env=process.env
 }={}){
  return async function handler(req,res) {
- if(req.method !== 'POST' || !Object.hasOwn(req.body || {}, 'signature')) return dispatch(req,res);
+ if(req.method !== 'POST' || !Object.hasOwn(req.body || {}, 'signature')){
+  if(env.VERCEL_ENV==='production'&&['prepare','send','retry','owner-send','reconcile-prepare'].includes(req.body?.action))
+   return res.status(401).json({ok:false,reason:'signed_manager_required'});
+  return dispatch(req,res);
+ }
  res.setHeader('Cache-Control','no-store');
  const manager = authenticateManager(req,env.HILLSIDE_MANAGER_DISPATCH_PUBLIC_KEY);
  if(!manager) return res.status(401).json({ok:false,reason:'manager_authentication_required'});
@@ -162,17 +168,27 @@ export function createEndpoint({
  if(action === 'history') return historyRead({...manager,method:'GET',query:manager.body.reservation},res);
  if(action === 'cancellation-status') return cancellation({...manager,method:'GET'},res,manager.body.reservation);
  if(action === 'cancel') return cancellation(manager,res);
+ if(action==='link-audit'||action==='link-bind'){
+  try{
+   if(action==='link-bind'&&env.VERCEL_ENV!=='production')return res.status(403).json({ok:false,reason:'production_required'});
+   const out=await checkedOriginal({store:linkStore,reader,id:manager.body.id,reservation:manager.body.reservation,allowCancelled:action==='link-audit'});
+   if(action==='link-bind')await bindGuestReference(linkStore,out.record.shortId,guestReference(manager.body.reservation,out.stay));
+   return res.status(200).json({ok:true,status:'verified',sourceBinding:true,operation:action,storedAlfred:'same_stay_room'});
+  }catch(error){return res.status(error.status===404?404:409).json({ok:false,reason:'original_link_identity_not_confirmed'});}
+ }
  if(action === 'prepare'){
   const b=manager.body;
   try{
    const stay=await reader.detail(b.reservation||{});
    if(typeof stay.checkinComplete!=='boolean'||typeof stay.paymentComplete!=='boolean')throw Error('Unknown state');
    const state=stay.checkinComplete?(stay.paymentComplete?'done':'unpaid'):(stay.paymentComplete?'paid':'none');
-   if(stay.alf!==alfredDetails(b.alf).code || stay.apt!==String(b.apt) || state!==b.state ||
+   if(!stay.alf || !stay.guestAlf || stay.apt!==String(b.apt) || state!==b.state ||
       Date.parse(stay.startsAt)!==Date.parse(b.startsAt) || Date.parse(stay.expiresAt)!==Date.parse(b.expiresAt) ||
       Date.parse(stay.releaseAt)!==Date.parse(b.releaseAt) ||
       (state==='done' && (stay.accessConfirmed!==true || stay.accessCode!==b.door)))throw Error('Current stay differs');
+   manager.body.alf=stay.alf;
    manager.body.guestName=stay.guestName;
+   manager.body.guestReference=guestReference(b.reservation,stay);
   }catch{
    return res.status(409).json({ok:false,reason:'current_reservation_not_confirmed'});
   }

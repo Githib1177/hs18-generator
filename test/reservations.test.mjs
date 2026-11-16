@@ -4,7 +4,7 @@ import {apiKey,createPrevioReader,dateWindows,parseXml,onlineCheckin,guestPaymen
 import {createReservationsHandler} from '../api/reservations.js';
 const clock=()=>new Date('2026-11-02T12:00:00Z');
 const room=(extra='')=>'<reservation><comId>123</comId><resId>456</resId><voucher>1234567890</voucher><term><from>2027-01-15 14:00:00</from><to>2027-01-20 10:00:00</to></term><status><statusId>2</statusId></status><object><name>Apt3</name></object><guest><gueId>7</gueId><firstName>Žaneta</firstName><lastName>Nováková</lastName><phone>+420777000001</phone></guest><alfredCode>SYNTH01</alfredCode><lanId>3</lanId><note>Must never be exported</note>'+extra+'</reservation>';
-function setup({restDenied=false,changeRoom=false,note,now=clock}={}){
+function setup({restDenied=false,changeRoom=false,note,partner='',now=clock}={}){
  const calls=[],booking={resId:456,hotId:763519,voucher:'1234567890',requirePayment:true,commissions:[{comId:123,cosId:2,termFrom:'2027-01-15T14:00:00',termTo:'2027-01-20T10:00:00',completeCheckin:true,guests:[{gueId:7,hasCompleteInfo:true}]}]};
  const acct={resId:456,groupAccount:{total:1250,paid:1250,needPay:false,items:[{coaId:1,comId:123,owner:{type:'guest',id:7},price:1250,paid:1250,count:1}]}};
  const reader=createPrevioReader({env:{PREVIO_API_KEY:'synthetic'},now,fetcher:async(url,options)=>{
@@ -12,7 +12,7 @@ function setup({restDenied=false,changeRoom=false,note,now=clock}={}){
   if(url.includes('/rest/')){assert.equal(options.headers['X-Previo-Hotel-Id'],'763519');assert.equal(options.headers['X-Previo-Language-ID'],'1');assert.equal(options.headers.Authorization,'ApiKey synthetic');return {ok:!restDenied,status:restDenied?403:200,text:async()=>JSON.stringify(url.includes('/account?')?acct:booking)};}
   assert.equal(options.method,'POST');assert.equal(options.redirect,'error');assert.equal(options.headers.Authorization,'ApiKey synthetic');
   if(url.endsWith('/get'))raw='<hotel><hotId>763519</hotId><isTest>false</isTest></hotel>';
-  else{assert.ok(url.endsWith('/searchReservations'));raw='<reservations>'+room().replace('Apt3',changeRoom?'Apt2':'Apt3').replace('Must never be exported',note||'Must never be exported')+'</reservations>';}
+  else{assert.ok(url.endsWith('/searchReservations'));raw='<reservations>'+room(partner).replace('Apt3',changeRoom?'Apt2':'Apt3').replace('Must never be exported',note||'Must never be exported')+'</reservations>';}
   return {ok:true,status:200,text:async()=>raw};
  }});return {reader,calls,booking,acct};
 }
@@ -93,15 +93,15 @@ test('needPay=false settles the account, and only CZK supports the one-crown fal
  g.items[0].price=1;g.curId=2;assert.equal(guestPayment(s.acct,s.booking),false);
 });
 test('OTA balance does not become guest debt, guest dog charge remains due',()=>{
- const s=setup();s.acct.groupAccount.total=11250;s.acct.groupAccount.paid=1250;s.acct.groupAccount.needPay=true;s.acct.groupAccount.items.push({comId:123,owner:{type:'ota',id:100},price:10000,paid:0,count:1});assert.equal(guestPayment(s.acct,s.booking),true);
- s.acct.groupAccount.items[0].paid=0;assert.equal(guestPayment(s.acct,s.booking),false);
+ const s=setup();s.acct.groupAccount.total=11250;s.acct.groupAccount.paid=1250;s.acct.groupAccount.needPay=true;s.acct.groupAccount.items.push({comId:123,owner:{type:'ota',id:100},price:10000,paid:0,count:1});assert.equal(guestPayment(s.acct,s.booking,{partnerBooking:true}),true);
+ s.acct.groupAccount.items[0].paid=0;assert.equal(guestPayment(s.acct,s.booking,{partnerBooking:true}),false);
 });
-test('unassigned items count as non-OTA, missing payment stays unknown',()=>{const s=setup();s.acct.groupAccount.needPay=true;delete s.acct.groupAccount.items[0].owner;assert.equal(guestPayment(s.acct,s.booking),true);s.acct.groupAccount.items[0].paid=0;assert.equal(guestPayment(s.acct,s.booking),false);delete s.acct.groupAccount.items[0].paid;assert.equal(guestPayment(s.acct,s.booking),null)});
+test('unassigned items count as non-OTA, missing payment stays unknown',()=>{const s=setup();s.acct.groupAccount.needPay=true;delete s.acct.groupAccount.items[0].owner;assert.equal(guestPayment(s.acct,s.booking,{partnerBooking:true}),true);s.acct.groupAccount.items[0].paid=0;assert.equal(guestPayment(s.acct,s.booking,{partnerBooking:true}),false);delete s.acct.groupAccount.items[0].paid;assert.equal(guestPayment(s.acct,s.booking,{partnerBooking:true}),null)});
 test('wrong reservation or unknown guest/room makes payment unknown',()=>{const s=setup();s.acct.resId=999;assert.equal(guestPayment(s.acct,s.booking),null);s.acct.resId=456;s.acct.groupAccount.items[0].comId=999;assert.equal(guestPayment(s.acct,s.booking),null)});
 test('explicit settlement covers a zero account; missing needPay does not prove settlement',()=>{const s=setup();s.acct.groupAccount.items=[];s.acct.groupAccount.total=0;s.acct.groupAccount.paid=0;assert.equal(guestPayment(s.acct,s.booking),true);delete s.acct.groupAccount.needPay;delete s.acct.groupAccount.total;assert.equal(guestPayment(s.acct,s.booking),null)});
-test('company debt counts and OTA overpayment cannot cancel it',()=>{const s=setup();s.acct.groupAccount.needPay=true;s.acct.groupAccount.items[0].owner={type:'company',id:77};s.acct.groupAccount.items[0].paid=0;s.acct.groupAccount.items.push({comId:123,owner:{type:'OTA',id:1},price:100,paid:10000,count:1});assert.equal(guestPayment(s.acct,s.booking),false);s.acct.groupAccount.items[0].paid=1250;assert.equal(guestPayment(s.acct,s.booking),true)});
-test('OTA-only debt is settled for the guest even when group needPay is true',()=>{const s=setup();s.acct.groupAccount.items[0].owner={type:'ota',id:1};s.acct.groupAccount.items[0].paid=0;s.acct.groupAccount.needPay=true;assert.equal(guestPayment(s.acct,s.booking),true)});
-test('one non-OTA owner credit does not erase another owner debt',()=>{const s=setup();s.acct.groupAccount.needPay=true;s.acct.groupAccount.items[0].paid=2500;s.acct.groupAccount.items.push({comId:123,owner:{type:'company',id:77},price:1250,paid:0,count:1});assert.equal(guestPayment(s.acct,s.booking),false)});
+test('company debt counts and OTA overpayment cannot cancel it',()=>{const s=setup();s.acct.groupAccount.needPay=true;s.acct.groupAccount.items[0].owner={type:'company',id:77};s.acct.groupAccount.items[0].paid=0;s.acct.groupAccount.items.push({comId:123,owner:{type:'OTA',id:1},price:100,paid:10000,count:1});assert.equal(guestPayment(s.acct,s.booking,{partnerBooking:true}),false);s.acct.groupAccount.items[0].paid=1250;assert.equal(guestPayment(s.acct,s.booking,{partnerBooking:true}),true)});
+test('OTA-only debt is settled for the guest even when group needPay is true',()=>{const s=setup();s.acct.groupAccount.items[0].owner={type:'ota',id:1};s.acct.groupAccount.items[0].paid=0;s.acct.groupAccount.needPay=true;assert.equal(guestPayment(s.acct,s.booking,{partnerBooking:true}),true)});
+test('one non-OTA owner credit does not erase another owner debt',()=>{const s=setup();s.acct.groupAccount.needPay=true;s.acct.groupAccount.items[0].paid=2500;s.acct.groupAccount.items.push({comId:123,owner:{type:'company',id:77},price:1250,paid:0,count:1});assert.equal(guestPayment(s.acct,s.booking,{partnerBooking:true}),false)});
 test('sealed server credential decrypts only with correct existing server secret',()=>{
  const env={HILLSIDE_WALLET_SESSION_SECRET:'synthetic-server-secret'},nonce=Buffer.alloc(12,7),key=createHash('sha256').update('hs18-previo-api-v1:'+env.HILLSIDE_WALLET_SESSION_SECRET).digest(),c=createCipheriv('aes-256-gcm',key,nonce);c.setAAD(Buffer.from('hotel763519'));const data=Buffer.concat([c.update('synthetic-api-key'),c.final()]);env.PREVIO_API_KEY_SEALED='v1.'+nonce.toString('base64url')+'.'+data.toString('base64url')+'.'+c.getAuthTag().toString('base64url');assert.equal(apiKey(env),'synthetic-api-key');assert.throws(()=>apiKey({...env,HILLSIDE_WALLET_SESSION_SECRET:'other'}));
 });
@@ -109,3 +109,17 @@ function response(){return {code:200,headers:{},setHeader(k,v){this.headers[k]=v
 test('anonymous search returns 401 before any data is read',async()=>{let calls=0;const h=createReservationsHandler({authorize:()=>false,reader:{search(){calls++}}}),r=response();await h({method:'GET',query:{q:'No'}},r);assert.equal(r.code,401);assert.equal(calls,0);assert.match(r.headers['Cache-Control'],/no-store/)});
 test('write methods cannot be used on reservation search',async()=>{const h=createReservationsHandler({authorize:()=>true}),r=response();await h({method:'POST'},r);assert.equal(r.code,405)});
 test('authorized handler forwards only actual reader result',async()=>{const h=createReservationsHandler({authorize:()=>true,reader:{search:async()=>({items:[selected],observedAt:clock().toISOString()})}}),r=response();await h({method:'GET',query:{q:'No'}},r);assert.equal(r.code,200);assert.equal(r.data.items.length,1)});
+
+test('Previo partner flag drives the same rule for both Airbnb and Booking',async()=>{
+ const note='Kód - 0258 HS18ACCESSV2 COM 123 APT 3 FROM 20270115140000 TO 20270120100000 VERIFIED APARTMENT SKIROOM CODE 0258 ENDHS18ACCESS';
+ for(const [id,name] of [['1262','AirBnB'],['770','Booking.com XML']]){
+  const s=setup({note,partner:'<prpId>'+id+'</prpId><partner><prpId>'+id+'</prpId><name>'+name+'</name></partner>'});
+  const group=s.acct.groupAccount;
+  group.items.push({comId:123,owner:{type:'ota',id:1},price:10000,paid:0,count:1});
+  group.needPay=true;assert.equal((await s.reader.detail(selected)).paymentComplete,true);
+  group.items[0].paid=0;group.needPay=false;assert.equal((await s.reader.detail(selected)).paymentComplete,false);
+ }
+ const direct=setup({note}); direct.acct.groupAccount.needPay=true;
+ assert.equal((await direct.reader.detail(selected)).paymentComplete,false);
+ direct.acct.groupAccount.needPay=false;assert.equal((await direct.reader.detail(selected)).paymentComplete,true);
+});

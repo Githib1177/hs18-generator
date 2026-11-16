@@ -39,7 +39,7 @@ function setup(t){
   if(String(url).startsWith('https://api.smsbrana.cz/')){sends++;if(timeout)throw Error('timeout');return {ok:true,status:200,text:async()=>'<err>0</err><sms_id>123456</sms_id>'};}
   assert.equal(url,'https://redis.invalid','No real network allowed');return {ok:true,json:async()=>({result:await store(JSON.parse(options.body))})};
  });
- const dependencies={store,getConfig:()=>config,getObject:async id=>objects.findLast(o=>o.id===id)||null,walletHandler:createWalletHandler({store,getConfig:()=>config,putObject:async o=>{if(googleDown)throw Error('Google failed');objects.push(o);if(googleReplyLost)throw Error('Google reply lost');},makeSaveUrl:()=>''}),linkHandler:createGuestLinkHandler({store})};
+ const dependencies={store,getConfig:()=>config,getObject:async id=>objects.findLast(o=>o.id===id)||null,walletHandler:createWalletHandler({store,getConfig:()=>config,putObject:async o=>{if(googleDown)throw Error('Google failed');objects.push(o);if(googleReplyLost)throw Error('Google reply lost');},makeSaveUrl:()=>''}),linkHandler:createGuestLinkHandler({store,env:{}})};
  let handler=createManagerDispatchHandler(dependencies);
  const call=async(body,auth=true)=>{
   const headers={cookie:auth?createSessionCookie().split(';')[0]:''};

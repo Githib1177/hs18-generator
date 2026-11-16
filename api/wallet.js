@@ -8,7 +8,6 @@ import {redis,stayKey,passKey,lockKey} from '../lib/wallet-store.js';
 import {assertActiveReference} from '../lib/cancellation-guard.js';
 const commitScript="if redis.call('GET',KEYS[1])~=ARGV[1] then return 0 end redis.call('SET',KEYS[2],ARGV[2]);redis.call('SET',KEYS[3],ARGV[2]);return 1";
 export function createWalletHandler({store=redis,getConfig=walletConfig,putObject=putWalletObject,getObject=getWalletObject,makeSaveUrl=walletSaveUrl,reader=createPrevioReader()}={}){return async(req,res)=>{
- if(req.method==='POST')return res.status(503).json({ok:false,reason:'guest_link_issuance_held'});
  res.setHeader('Cache-Control','no-store');
  if(!isAuthorized(req))return res.status(401).json({error:'Přihlaste se ke správě Wallet heslem Falconi Messengeru.'});
  if(req.method!=='POST')return res.status(405).json({error:'Nepovolená metoda.'});

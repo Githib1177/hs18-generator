@@ -36,7 +36,7 @@ test('signed endpoint reuses existing preparation, send, history, and cancellati
  const endpoint=createEndpoint({
   dispatch:handler('dispatch'),cancellation:handler('cancellation'),historyRead:handler('history'),
   env:{HILLSIDE_MANAGER_DISPATCH_PUBLIC_KEY:published,VERCEL_GIT_COMMIT_SHA:'local-fixture'},
-  reader:{detail:async()=>({...input,guestName:'Fixture',checkinComplete:false,paymentComplete:false})}
+  reader:{detail:async()=>({...input,...input.reservation,guestAlf:'GROUP01',guestName:'Fixture',checkinComplete:false,paymentComplete:false})}
  });
  const run=async(body)=>{
   const res=response();
