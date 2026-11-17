@@ -37,7 +37,7 @@
  window.hillsideWalletLink=url=>{if(!card||card.fingerprint!==fingerprint())return url;const parsed=new URL(url);if(parsed.origin!=='https://hillside18-guest-portal.vercel.app')return url;const hash=new URLSearchParams(parsed.hash.slice(1));hash.set('wallet',card.token);parsed.hash=hash.toString();return parsed.href;};
  q('walletLoginButton').addEventListener('click',async()=>{
   const button=q('walletLoginButton');button.disabled=true;
-  try{const response=await fetch('/api/wallet-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:q('walletPassword').value})});const data=await response.json();if(!response.ok)throw new Error(data.error||'Přihlášení se nezdařilo.');q('walletPassword').value='';q('walletLogin').hidden=true;q('walletStatus').textContent='Správa karet je přihlášená.';}catch(e){q('walletStatus').textContent=e.message;}finally{button.disabled=false;}
+  try{const response=await fetch('/api/wallet-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:q('walletPassword').value})});const data=await response.json();if(!response.ok)throw new Error(data.error||'Přihlášení se nezdařilo.');q('walletPassword').value='';q('walletLogin').hidden=true;q('walletStatus').textContent='Správa karet je přihlášená.';document.dispatchEvent(new Event('hillside:links-changed'));}catch(e){q('walletStatus').textContent=e.message;}finally{button.disabled=false;}
  });
  fetch('/api/wallet-auth').then(r=>r.json()).then(data=>{q('walletLogin').hidden=data.ok===true;}).catch(()=>{});
  window.hillsideWalletSync=async({existing=true}={})=>{

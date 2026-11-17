@@ -15,6 +15,7 @@ import {walletConfig,getWalletObject} from '../lib/google-wallet.js';
 import {redis,passKey,lockKey} from '../lib/wallet-store.js';
 import {digest,shortId,shortUrls,targets,recoverPreparation} from '../lib/dispatch-preparation.js';
 import {assertActiveReference} from '../lib/cancellation-guard.js';
+import {createOwnerLinksHandler} from '../lib/owner-links.js';
 
 const prefix='hs18:manager-dispatch:v1:',lifetime=180*86400;
 const uuid=id=>typeof id==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id);
@@ -60,7 +61,7 @@ export function createManagerDispatchHandler({store=redis,walletHandler=wallet,l
     await assertActiveReference(store,input.stayHash);
     const id=b.preparationId===undefined?randomUUID():b.preparationId;if(!uuid(id))return res.status(400).json({error:'Neplatné stabilní ID přípravy.'});
     await hold(prefix+id+':prepare-lock');
-    const bind=()=>isAuthenticatedManager(req)&&b.guestReference?bindGuestReference(store,shortId(id),b.guestReference):undefined;
+    const bind=()=>isAuthenticatedManager(req)&&b.guestReference?bindGuestReference(store,shortId(id),{...b.guestReference,guestName:input.history.guestName,createdAt:record.createdAt}):undefined;
     const oldRaw=await store(['GET',prefix+id]);let record=oldRaw?JSON.parse(oldRaw):null;
     if(record){
      if(record.requestHash!==input.requestHash)return res.status(409).json({error:'Stejné ID přípravy nesmí změnit pobyt ani obsah.'});
@@ -143,12 +144,13 @@ export function createManagerDispatchHandler({store=redis,walletHandler=wallet,l
   finally{for(const {key,claim} of locks.reverse())try{await store(['EVAL',"if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('DEL',KEYS[1]) end return 0",1,key,claim]);}catch{}}
  };
 }
-const managerActions = new Set(['prepare','send','retry','owner-send','status','reconcile','reconcile-prepare','cancel','cancellation-status','history','probe','link-audit','link-bind']);
+const managerActions = new Set(['prepare','send','retry','owner-send','status','reconcile','reconcile-prepare','cancel','cancellation-status','history','probe','link-audit','link-bind','owner-link-readback']);
 
 export function createEndpoint({
  dispatch = createManagerDispatchHandler(),
  cancellation = createCancellationHandler(),
  historyRead = createManagerHistoryHandler(),
+ ownerLinks = createOwnerLinksHandler(),
  reader = createPrevioReader(),
  linkStore = redis,
  env=process.env
@@ -166,6 +168,10 @@ export function createEndpoint({
  if(!managerActions.has(action)) return res.status(400).json({ok:false,reason:'unsupported_manager_operation'});
  if(action === 'probe') return res.status(200).json({ok:true,status:'ready',deployment:env.VERCEL_GIT_COMMIT_SHA||null});
  if(action === 'history') return historyRead({...manager,method:'GET',query:manager.body.reservation},res);
+ if(action === 'owner-link-readback'){
+  if(!manager.body.reservation)return res.status(400).json({ok:false,reason:'exact_reservation_required'});
+  return ownerLinks({...manager,method:'GET'},res,{exact:manager.body.reservation,query:{}});
+ }
  if(action === 'cancellation-status') return cancellation({...manager,method:'GET'},res,manager.body.reservation);
  if(action === 'cancel') return cancellation(manager,res);
  if(action==='link-audit'||action==='link-bind'){

@@ -44,6 +44,7 @@ async function send(req, res, managerGrant=null) {
     try{
       context=contextOf(req.body);const actual=await contextFromMessage(text);
       if(!actual||actual.stay!==context.stay||actual.state!==context.state||actual.apt!==context.apt)throw new Error('Text neodpovídá aktuálním údajům. Vytvořte odkaz znovu.');
+      context.shortPath=actual.shortPath;
     }catch(error){return res.status(400).json({ok:false,error:error.message});}
   }else{
     // Also cover old browser tabs whose request has only {to,text}.

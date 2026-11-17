@@ -44,7 +44,8 @@ export function createGuestLinkHandler({store=redis,reader=createPrevioReader(),
      if(target.searchParams.get('apt')!==stay.apt||alfredDetails(target.searchParams.get('alf')).code!==stay.alf)throw Error('Stažená rezervace se změnila');
      liveDestination(url,stay);
     }
-    ref=guestReference(req.body.reservation,stay);
+    ref={...guestReference(req.body.reservation,stay),guestName:stay.guestName,createdAt:Date.now(),
+     preferredLanguage:['cs','en','de'].includes(req.body.language)?req.body.language:null};
    }
    for(const url of Object.values(urls)){const stay=urlStay(url);if(stay)await assertActiveReference(store,stay);}
    const supplied=req.body?.id;

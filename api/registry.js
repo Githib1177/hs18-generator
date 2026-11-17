@@ -2,10 +2,13 @@ import {isAuthorized} from './_wallet-auth.js';
 import registry from '../lib/registry.cjs';
 import {createManagerHistoryHandler} from '../lib/manager-history-handler.js';
 import {createCancellationHandler} from '../lib/cancellation-handler.js';
+import {createOwnerLinksHandler} from '../lib/owner-links.js';
 const {contextOf,checkContext} = registry;
 const readHistory=createManagerHistoryHandler();
 const cancellation=createCancellationHandler();
+const ownerLinks=createOwnerLinksHandler();
 export default async function handler(req,res){
+  if(req.query?.operation==='owner-links')return ownerLinks(req,res);
   if(req.query?.operation==='cancellation'){
     const {operation,...query}=req.query;
     return cancellation(req,res,query);

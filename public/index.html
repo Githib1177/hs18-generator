@@ -66,12 +66,35 @@
     .ok{background:#ecfdf5;color:#065f46;border:1px solid #bbf7d0}
     .err{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
     .spin{display:inline-block;width:16px;height:16px;border-radius:999px;border:2px solid #fff;border-right-color:transparent;animation:sp .8s linear infinite}
+    #ownerLinks summary{cursor:pointer;color:var(--dark);font-size:1.1rem;font-weight:800}
+    #ownerLinks form{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0}
+    #ownerLinkRows{padding:0;list-style:none;margin:0}
+    #ownerLinkRows>li{border-top:1px solid #dbe5e0;padding:12px 0}
+    #ownerLinkRows ul{padding-left:1.2rem}
+    #ownerLinkRows a{overflow-wrap:anywhere}
     @keyframes sp{to{transform:rotate(360deg)}}
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="h1">Hillside 18 – Generátor odkazů (CZ/EN/DE)</div>
+
+    <details class="card" id="ownerLinks">
+      <summary>Přehled odkazů pro hosty</summary>
+      <p class="muted">Odkazy z Messengeru a jejich potvrzené odeslání přes SMS bránu. Odeslání v portálu či jiné aplikaci se zde nepotvrzuje.</p>
+      <form id="ownerLinkSearch">
+        <label for="ownerLinkVoucher">Voucher</label>
+        <input id="ownerLinkVoucher" type="search" maxlength="80" placeholder="Všechny rezervace">
+        <button class="btn btn-dark" type="submit">Načíst</button>
+        <button class="btn btn-ghost" type="button" id="ownerLinkReset">Všechny</button>
+      </form>
+      <p id="ownerLinkStatus" class="muted" role="status"></p>
+      <ul id="ownerLinkRows"></ul>
+      <div class="right">
+        <button class="btn btn-ghost" type="button" id="ownerLinkPrevious" hidden>Předchozí</button>
+        <button class="btn btn-ghost" type="button" id="ownerLinkNext" hidden>Další</button>
+      </div>
+    </details>
 
     <!-- VSTUPY -->
     <div class="card">
@@ -790,12 +813,13 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
       const signature=()=>JSON.stringify(['guestName','guestIsFemale','alf','apt','door','state','baseUrl','lang'].map(id=>el(id).value));
       const submitted=signature();
       try{
-        const response=await fetch('/api/guest-link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({urls:{cs:urlCS,en:urlEN,de:urlDE},reservation:window.hillsideGuestReference?.()})});
+        const response=await fetch('/api/guest-link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({urls:{cs:urlCS,en:urlEN,de:urlDE},reservation:window.hillsideGuestReference?.(),language:lang})});
         const result=await response.json();
         if(!response.ok)throw new Error(result.error||'Krátký odkaz se nepodařilo vytvořit.');
         if(signature()!==submitted)throw new Error('Údaje pobytu se změnily. Vytvořte odkaz znovu.');
         for(const language of ['cs','en','de']){const parsed=new URL(result.urls?.[language]);if(parsed.origin!=='https://hs18-generator.vercel.app'||!/^\/s\/[A-Za-z0-9_-]{22}(\/(en|de))?$/.test(parsed.pathname)||parsed.search||parsed.hash)throw new Error('Server nevrátil platný krátký odkaz.');}
         urlCS=result.urls.cs;urlEN=result.urls.en;urlDE=result.urls.de;
+        document.dispatchEvent(new Event('hillside:links-changed'));
       }catch(error){el('walletStatus').textContent=error.message;return false;}
       const urls = { cs:urlCS, en:urlEN, de:urlDE };
 
@@ -950,11 +974,13 @@ Vielen Dank und einen angenehmen Aufenthalt!`;
       }finally{
         btn.disabled = false;
         btn.innerHTML = oldHtml;
+        document.dispatchEvent(new Event('hillside:links-changed'));
       }
     });
   </script>
   <script src="/wallet.js"></script>
   <script src="/reservations.js"></script>
+  <script src="/owner-links.js" defer></script>
 </body>
 </html>
 
